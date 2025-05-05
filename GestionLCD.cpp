@@ -1,4 +1,4 @@
-// $Id: GestionLCD.cpp,v 1.4 2025/04/16 14:27:47 administrateur Exp $
+// $Id: GestionLCD.cpp,v 1.16 2025/05/05 16:31:25 administrateur Exp $
 
 #if USE_SIMULATION
 #include "ArduinoTypes.h"
@@ -8,7 +8,11 @@
 #include "AppPixelToaster.h"
 #endif
 
+#include "DateTime.h"
 #include "GestionLCD.h"
+#include "AnalogRead.h"
+
+#define USE_PAINT_LINE    1
 
 #if USE_SIMULATION
 using namespace PixelToaster;
@@ -322,11 +326,23 @@ Paint::Paint()
 	Serial.printf("Paint::Paint()\n");
 
   // Initialisation du cache de couleur a 'BLACK'
-  Serial.printf("-> Init. cache (%u x %u)\n", LCD_X_SIZE_MAX, LCD_Y_SIZE_MAX);
+  Serial.printf("-> Init. cache (%u x %u) (sizeof %u bytes)\n",
+    LCD_X_SIZE_MAX, LCD_Y_SIZE_MAX, (unsigned int)sizeof(m__cache_color));
 
   for (UWORD y = 0; y < LCD_Y_SIZE_MAX; y++) {
     for (UWORD x = 0; x < LCD_X_SIZE_MAX; x++) {
       m__cache_color[x][y] = BLACK;
+    }
+  }
+
+  // Initialisation de l'ecran virtual a 'BLACK'
+  Serial.printf("-> Init. screen virtual (%u x %u) (sizeof %u bytes)\n",
+    (SCREEN_VIRTUAL_BOTTOM_X - SCREEN_VIRTUAL_TOP_X), (SCREEN_VIRTUAL_BOTTOM_Y - SCREEN_VIRTUAL_TOP_Y),
+    (unsigned int)sizeof(m__screen_virtual));
+  
+  for (UWORD y = 0; y < (SCREEN_VIRTUAL_BOTTOM_Y - SCREEN_VIRTUAL_TOP_Y); y++) {
+    for (UWORD x = 0; x < (SCREEN_VIRTUAL_BOTTOM_X - SCREEN_VIRTUAL_TOP_X); x++) {
+      m__screen_virtual[x][y] = BLACK;
     }
   }
 }
@@ -404,12 +420,24 @@ void Paint::Paint_SetMirroring(UBYTE mirror)
     Ypoint  :   At point Y
     Color   :   Painted colors
 ******************************************************************************/
-void Paint::Paint_SetPixel(UWORD Xpoint, UWORD Ypoint, UWORD Color)
+void Paint::Paint_SetPixel(UWORD Xpoint, UWORD Ypoint, UWORD Color, bool i__flg_screen_virtual)
 {
   //Serial.printf("%s(X:[%d] Y:[%d] Color:[0x%04x])\n", __FUNCTION__ , Xpoint, Ypoint, Color);
 
-  if (Xpoint > m__paint.Width || Ypoint > m__paint.Height) {
-    //Debug("Exceeding display boundaries\r\n");
+  if (i__flg_screen_virtual == false) {
+    if (Xpoint > m__paint.Width || Ypoint > m__paint.Height) {
+      //Debug("Exceeding display boundaries\r\n");
+      return;
+    }
+  }
+
+  if (i__flg_screen_virtual == true) {
+    if (((Xpoint - 1) >= SCREEN_VIRTUAL_TOP_X) && ((Xpoint - 1) <= SCREEN_VIRTUAL_BOTTOM_X)
+     && ((Ypoint - 1) >= SCREEN_VIRTUAL_TOP_Y) && ((Ypoint - 1) <= SCREEN_VIRTUAL_BOTTOM_Y))
+    {
+      m__screen_virtual[Xpoint - 1 - SCREEN_VIRTUAL_TOP_X][Ypoint - 1 - SCREEN_VIRTUAL_TOP_Y] = Color;
+    }
+
     return;
   }
 
@@ -462,7 +490,7 @@ void Paint::Paint_SetPixel(UWORD Xpoint, UWORD Ypoint, UWORD Color)
   }
 
   // printf("x = %d, y = %d\r\n", X, Y);
-  if (X > m__paint.WidthMemory || Y > m__paint.HeightMemory) {
+  if (X >= m__paint.WidthMemory || Y >= m__paint.HeightMemory) {
     //Debug("Exceeding display boundaries\r\n");
     return;
   }
@@ -513,7 +541,8 @@ parameter:
     Dot_Pixel	:	point size
 ******************************************************************************/
 void Paint::Paint_DrawPoint( UWORD Xpoint,       UWORD Ypoint, UWORD Color,
-                      DOT_PIXEL Dot_Pixel,DOT_STYLE Dot_FillWay)
+                      DOT_PIXEL Dot_Pixel,DOT_STYLE Dot_FillWay,
+                      bool i__flg_screen_virtual)
 {
     if (Xpoint > m__paint.Width || Ypoint > m__paint.Height) {
         //Debug("Paint_DrawPoint Input exceeds the normal display range\r\n");
@@ -527,7 +556,7 @@ void Paint::Paint_DrawPoint( UWORD Xpoint,       UWORD Ypoint, UWORD Color,
                 if(Xpoint + XDir_Num - Dot_Pixel < 0 || Ypoint + YDir_Num - Dot_Pixel < 0)
                     break;
                 // printf("x = %d, y = %d\r\n", Xpoint + XDir_Num - Dot_Pixel, Ypoint + YDir_Num - Dot_Pixel);
-                Paint_SetPixel(Xpoint + XDir_Num - Dot_Pixel, Ypoint + YDir_Num - Dot_Pixel, Color);
+                Paint_SetPixel(Xpoint + XDir_Num - Dot_Pixel, Ypoint + YDir_Num - Dot_Pixel, Color, i__flg_screen_virtual);
             }
         }
     } else {
@@ -549,7 +578,8 @@ parameter:
     Color  ：The color of the line segment
 ******************************************************************************/
 void Paint::Paint_DrawLine(UWORD Xstart, UWORD Ystart, UWORD Xend, UWORD Yend, 
-                    UWORD Color, DOT_PIXEL Line_width, LINE_STYLE Line_Style)
+                    UWORD Color, DOT_PIXEL Line_width, LINE_STYLE Line_Style,
+                    bool i__flg_screen_virtual)
 {
     Serial.printf("Entering in 'Paint_DrawLine(%u, %u, %u, %u, %u, %u, %u)'\n",
     	Xstart, Ystart, Xend, Yend, Color, Line_width, Line_Style);
@@ -578,10 +608,10 @@ void Paint::Paint_DrawLine(UWORD Xstart, UWORD Ystart, UWORD Xend, UWORD Yend,
         //Painted dotted line, 2 point is really virtual
         if (Line_Style == LINE_STYLE_DOTTED && Dotted_Len % 3 == 0) {
             //Debug("LINE_DOTTED\r\n");
-            Paint_DrawPoint(Xpoint, Ypoint, IMAGE_BACKGROUND, Line_width, DOT_STYLE_DFT);
+            Paint_DrawPoint(Xpoint, Ypoint, IMAGE_BACKGROUND, Line_width, DOT_STYLE_DFT, i__flg_screen_virtual);
             Dotted_Len = 0;
         } else {
-            Paint_DrawPoint(Xpoint, Ypoint, Color, Line_width, DOT_STYLE_DFT);
+            Paint_DrawPoint(Xpoint, Ypoint, Color, Line_width, DOT_STYLE_DFT, i__flg_screen_virtual);
         }
         if (2 * Esp >= dy) {
             if (Xpoint == Xend)
@@ -712,16 +742,20 @@ void Paint::Paint_DrawCircle(  UWORD X_Center, UWORD Y_Center, UWORD Radius,
     Remarque: Si 'Color_Background' est egal a 'TRANSPARENCY' -> Pas de maj du pixel ;-)
 ******************************************************************************/
 void Paint::Paint_DrawChar(UWORD Xpoint, UWORD Ypoint, const char Acsii_Char,
-                    sFONT* Font, UWORD Color_Background, UWORD Color_Foreground)
+                    sFONT* Font, UWORD Color_Background, UWORD Color_Foreground,
+                    bool i__flg_screen_virtual)
 {
   //Serial.printf("%s('%c')\n", __FUNCTION__, Acsii_Char);
 
   UWORD Page, Column;
 
-  if (Xpoint > m__paint.Width || Ypoint > m__paint.Height) {
-    //Debug("Paint_DrawChar Input exceeds the normal display range\r\n");
-    return;
+  if (i__flg_screen_virtual == false) {
+    if (Xpoint > m__paint.Width || Ypoint > m__paint.Height) {
+      //Debug("Paint_DrawChar Input exceeds the normal display range\r\n");
+      return;
+    }
   }
+
   uint32_t Char_Offset = (Acsii_Char - ' ') * Font->Height * (Font->Width / 8 + (Font->Width % 8 ? 1 : 0));
   const unsigned char *ptr = &Font->table[Char_Offset];
 
@@ -735,7 +769,7 @@ void Paint::Paint_DrawChar(UWORD Xpoint, UWORD Ypoint, const char Acsii_Char,
 #else
         if (*ptr & (0x80 >> (Column % 8)))
 #endif
-          Paint_SetPixel (Xpoint + Column, Ypoint + Page, Color_Foreground );
+          Paint_SetPixel (Xpoint + Column, Ypoint + Page, Color_Foreground, i__flg_screen_virtual);
       } else {
 #if !USE_SIMULATION
         if (pgm_read_byte(ptr) & (0x80 >> (Column % 8)))
@@ -743,10 +777,10 @@ void Paint::Paint_DrawChar(UWORD Xpoint, UWORD Ypoint, const char Acsii_Char,
         if (*ptr & (0x80 >> (Column % 8)))
 #endif
         {
-          Paint_SetPixel (Xpoint + Column, Ypoint + Page, Color_Foreground );
+          Paint_SetPixel (Xpoint + Column, Ypoint + Page, Color_Foreground, i__flg_screen_virtual);
         }
         else if (TRANSPARENCY != Color_Background) {
-          Paint_SetPixel (Xpoint + Column, Ypoint + Page, Color_Background );
+          Paint_SetPixel (Xpoint + Column, Ypoint + Page, Color_Background, i__flg_screen_virtual);
         }
       }
       //One pixel is 8 bits
@@ -773,22 +807,25 @@ void Paint::Paint_DrawChar(UWORD Xpoint, UWORD Ypoint, const char Acsii_Char,
     Remarque: Si 'Color_Background' est egal a 'TRANSPARENCY' -> Pas de maj du pixel ;-)
 ******************************************************************************/
 void Paint::Paint_DrawSymbol(UWORD Xpoint, UWORD Ypoint, const char Num_Symbol,
-                    sFONT* Font, UWORD Color_Background, UWORD Color_Foreground)
+                    sFONT* Font, UWORD Color_Background, UWORD Color_Foreground,
+                    bool i__flg_screen_virtual)
 {
   //Serial.printf("%s(%d, %d, %d)\n", __FUNCTION__, Xpoint, Ypoint,  Num_Symbol);
 
   UWORD Page, Column;
 
   // TODO: Faire une methode ;-)
-  if (Xpoint == 0 || Xpoint > m__paint.Width || Ypoint == 0 || Ypoint > m__paint.Height) {
-    Serial.printf("error: Paint_DrawSymbol Input out of range X:[%d/%d] Y:[%d/%d]\n",
-       Xpoint, m__paint.Width, Ypoint, m__paint.Height);
+  if (i__flg_screen_virtual == false) {
+    if (Xpoint == 0 || Xpoint > m__paint.Width || Ypoint == 0 || Ypoint > m__paint.Height) {
+      Serial.printf("error: Paint_DrawSymbol Input out of range X:[%d/%d] Y:[%d/%d]\n",
+        Xpoint, m__paint.Width, Ypoint, m__paint.Height);
 
 #if USE_SIMULATION
-    exit(1);
+      exit(1);
 #else
-    return;	// Operation ignoree
+      return;	// Operation ignoree
 #endif
+    }
   }
 
   uint32_t Char_Offset = Num_Symbol * Font->Height * (Font->Width / 8 + (Font->Width % 8 ? 1 : 0));
@@ -804,7 +841,7 @@ void Paint::Paint_DrawSymbol(UWORD Xpoint, UWORD Ypoint, const char Num_Symbol,
 #else
         if (*ptr & (0x80 >> (Column % 8)))
 #endif
-          Paint_SetPixel (Xpoint + Column, Ypoint + Page, Color_Foreground );
+          Paint_SetPixel (Xpoint + Column, Ypoint + Page, Color_Foreground, i__flg_screen_virtual);
       } else {
 #if !USE_SIMULATION
         if (pgm_read_byte(ptr) & (0x80 >> (Column % 8)))
@@ -812,10 +849,10 @@ void Paint::Paint_DrawSymbol(UWORD Xpoint, UWORD Ypoint, const char Num_Symbol,
         if (*ptr & (0x80 >> (Column % 8)))
 #endif
         {
-          Paint_SetPixel (Xpoint + Column, Ypoint + Page, Color_Foreground );
+          Paint_SetPixel (Xpoint + Column, Ypoint + Page, Color_Foreground, i__flg_screen_virtual);
         }
         else if (TRANSPARENCY != Color_Background) {
-          Paint_SetPixel (Xpoint + Column, Ypoint + Page, Color_Background );
+          Paint_SetPixel (Xpoint + Column, Ypoint + Page, Color_Background, i__flg_screen_virtual);
         }
       }
       //One pixel is 8 bits
@@ -840,34 +877,37 @@ void Paint::Paint_DrawSymbol(UWORD Xpoint, UWORD Ypoint, const char Num_Symbol,
     Color_Foreground : Select the foreground color of the English character
 ******************************************************************************/
 void Paint::Paint_DrawString_EN(UWORD Xstart, UWORD Ystart, const char * pString,
-                         sFONT* Font, UWORD Color_Background, UWORD Color_Foreground )
+                         sFONT* Font, UWORD Color_Background, UWORD Color_Foreground,
+                         bool i__flg_screen_virtual)
 {
   //Serial.printf("%s(\"%s\")\n", __FUNCTION__, pString);
 
   UWORD Xpoint = Xstart;
   UWORD Ypoint = Ystart;
 
-  if (Xstart > m__paint.Width || Ystart > m__paint.Height) {
-    Serial.printf("Paint_DrawString_EN Input exceeds the normal display range\n");
-    Serial.printf("Xstart [%d] > [%d] or Ystart[%d] > [%d]\n",
-		Xstart, m__paint.Width, Ystart, m__paint.Height);
+  if (i__flg_screen_virtual == false) {
+    if (Xstart > m__paint.Width || Ystart > m__paint.Height) {
+      Serial.printf("Paint_DrawString_EN Input exceeds the normal display range\n");
+      Serial.printf("Xstart [%d] > [%d] or Ystart[%d] > [%d]\n",
+		    Xstart, m__paint.Width, Ystart, m__paint.Height);
 
-    return;
+      return;
+    }
   }
 
   while (* pString != '\0') {
     //if X direction filled , reposition to(Xstart,Ypoint),Ypoint is Y direction plus the Height of the character
-    if ((Xpoint + Font->Width ) > m__paint.Width ) {
+    if ((Xpoint + Font->Width ) > m__paint.Width + 100) {
       Xpoint = Xstart;
       Ypoint += Font->Height;
     }
 
     // If the Y direction is full, reposition to(Xstart, Ystart)
-    if ((Ypoint  + Font->Height ) > m__paint.Height ) {
+    if ((Ypoint  + Font->Height ) > m__paint.Height + 100) {
       Xpoint = Xstart;
       Ypoint = Ystart;
     }
-    Paint_DrawChar(Xpoint, Ypoint, * pString, Font, Color_Background, Color_Foreground);
+    Paint_DrawChar(Xpoint, Ypoint, * pString, Font, Color_Background, Color_Foreground, i__flg_screen_virtual);
 
     //The next character of the address
     pString ++;
@@ -1015,34 +1055,30 @@ void Paint::Paint_DrawImage(const unsigned char *image, UWORD xStart, UWORD ySta
    - Utilisation de la fonte passee en argument
    - Couleur de fond: 'GRAY'
  */
-void Paint::Paint_DrawBarGraph(int i__value, int i__value_max, int i__index, sFONT* Font, UWORD Color_Foreground)
+void Paint::Paint_DrawBarGraph(UWORD i__y, sFONT* Font, UWORD Color_Foreground, bool i__flg_screen_virtual)
 {
-  static bool g__flg_bargraph_background = false;
-
   int l__nbr_block_x_full   = (LCD_X_SIZE_MAX / Font->Width);
   int l__nbr_block_x_residu = (LCD_X_SIZE_MAX % Font->Width);
 
-  if (g__flg_bargraph_background == false) {
-    // Fond avec 'GRAY' sur toute la largeur de l'ecran
-    int x = 0;
-    for (x = 0; x < l__nbr_block_x_full; x++) {
-      // 1st line: A 1 pixel du bord gauche
-      Paint_DrawSymbol(1 + (x * Font->Width), 48, 0, Font, BLACK, GRAY);
-    }
-
-    /* 1 ligne  verticale  -> #1 de la font 'font16Symbols'
-       2 lignes verticales -> #2  de la font 'font16Symbols'
-       ...
-       7 lignes verticales -> #7  de la font 'font16Symbols'
-       ...
-    */
-    // Last line: A 2 pixels du bord droit du pave #(l__nbr_block_x_residu - 2)
-    Paint_DrawSymbol(1 + (x * Font->Width), 48, (l__nbr_block_x_residu - 2), Font, BLACK, GRAY);
-    // Fin: Fond avec 'GRAY' sur toute la largeur de l'ecran
-
-    g__flg_bargraph_background = true;
+  // Fond avec 'GRAY' sur toute la largeur de l'ecran
+  int x = 0;
+  for (x = 0; x < l__nbr_block_x_full; x++) {
+    // 1st line: A 1 pixel du bord gauche
+    Paint_DrawSymbol(1 + (x * Font->Width), i__y, 0, Font, BLACK, Color_Foreground, i__flg_screen_virtual);
   }
 
+  /* 1 ligne  verticale  -> #1 de la font 'font16Symbols'
+     2 lignes verticales -> #2  de la font 'font16Symbols'
+       ...
+     7 lignes verticales -> #7  de la font 'font16Symbols'
+       ...
+  */
+  // Last line: A 2 pixels du bord droit du pave #(l__nbr_block_x_residu - 2)
+  Paint_DrawSymbol(1 + (x * Font->Width), i__y, (l__nbr_block_x_residu - 2), Font, BLACK, Color_Foreground, i__flg_screen_virtual);
+}
+
+void Paint::Paint_DrawBarGraph(UWORD i__y, int i__value, int i__value_max, int i__index, sFONT* Font, UWORD Color_Foreground)
+{
   /* Calcul de la position dans le bargraph
      => Position minimale a gauche: 1
      => Position maximale a droite: ('LCD_X_SIZE_MAX' - 'Font->Width' - 3)
@@ -1055,9 +1091,184 @@ void Paint::Paint_DrawBarGraph(int i__value, int i__value_max, int i__index, sFO
   }
 
   UWORD l__x = (int)(((float)i__value * (float)(LCD_X_SIZE_MAX - Font->Width - 3)) / (float)i__value_max);
-  Paint_DrawSymbol(l__x + 1, 48, i__index, Font, TRANSPARENCY, Color_Foreground);
+  Paint_DrawSymbol(l__x + 1, i__y, i__index, Font, TRANSPARENCY, Color_Foreground);
 }
 // Fin: Code tire de 'GUI_Paint.cpp'
+
+// Decalage a gauche des pixels de l'ecran virtuel et rafraichissement de celui-ci
+void Paint::Paint_ShiftAndRefreshScreenVirtual(bool i__force_shift)
+{
+  static int g__period_for_shift = SCREEN_VIRTUAL_PERIOD_SHIFT;
+
+  if (i__force_shift == true || g__period_for_shift == 0) {
+    for (UWORD x = 1; x < (SCREEN_VIRTUAL_BOTTOM_X - SCREEN_VIRTUAL_TOP_X); x++) {
+      for (UWORD y = 0; y < (SCREEN_VIRTUAL_BOTTOM_Y - SCREEN_VIRTUAL_TOP_Y); y++) {
+        m__screen_virtual[x-1][y] = m__screen_virtual[x][y];
+      }
+    }
+
+#if 0
+    if (i__force_shift == true) {
+      Serial.printf("Paint::Paint_ShiftScreenVirtual(): Force shift...\n");
+    }
+#endif
+
+    // Refresh the screen virtual to LCD 
+    for (UWORD x = 0; x < (SCREEN_VIRTUAL_BOTTOM_X - SCREEN_VIRTUAL_TOP_X) && x < LCD_HEIGHT; x++) {
+      for (UWORD y = 0; y < (SCREEN_VIRTUAL_BOTTOM_Y - SCREEN_VIRTUAL_TOP_Y) && y < LCD_WIDTH; y++) {
+        Paint_SetPixel(min(x + SCREEN_VIRTUAL_TOP_X, LCD_HEIGHT), min(y + SCREEN_VIRTUAL_TOP_Y, LCD_WIDTH), m__screen_virtual[x][y]);
+      }
+    }
+
+    g__period_for_shift = SCREEN_VIRTUAL_PERIOD_SHIFT;
+  }
+  else {
+    g__period_for_shift--;
+  }
+}
+
+void Paint::Paint_ClearScreenVirtual()
+{
+  //Serial.printf("Paint::Paint_ClearScreenVirtual\n");
+
+  for (UWORD y = 0; y < (SCREEN_VIRTUAL_BOTTOM_Y - SCREEN_VIRTUAL_TOP_Y); y++) {
+    for (UWORD x = 0; x < (SCREEN_VIRTUAL_BOTTOM_X - SCREEN_VIRTUAL_TOP_X); x++) {
+      m__screen_virtual[x][y] = BLACK;
+    }
+  }
+
+  g__gestion_lcd->Paint_DrawSymbol(230, 65, 1, &Font16Symbols, BLACK, GRAY, true);
+  g__gestion_lcd->Paint_DrawSymbol(230, 65 + 16 + 1, 1, &Font16Symbols, BLACK, GRAY, true);
+  g__gestion_lcd->Paint_DrawSymbol(230, 65 + 32, 1, &Font16Symbols, BLACK, BLACK, true);
+}
+
+void Paint::Paint_UpdateLcdFromScreenVirtual(bool i__force_updating)
+{
+  //Serial.printf("Paint::Paint_UpdateLcdFromScreenVirtual(%d)\n", i__force_updating);
+
+  /* Update from screen virtual
+     - Affichage des valeurs sous la forme de courbes horodatees
+  */
+  ENUM_IN_THE_PERIOD l__enum_period = g__date_time->isRtcSecInDayInRange();
+
+  if ((l__enum_period == ENUM_PERIOD_NONE || l__enum_period == ENUM_MI_PERIOD_DONE) && i__force_updating == false) {
+    Paint_DrawSymbol(230, 65, 1, &Font16Symbols, BLACK, GRAY, true);
+    Paint_DrawSymbol(230, 65 + 16 + 1, 1, &Font16Symbols, BLACK, GRAY, true);
+
+    /* Affichage des courbes...
+       - Effacement de l'affichage precedent...
+       - Utilisation du seul symbol #16 de la fonte 16x11 correctement positionne @ a la valeur
+         => 33 positions verticales correspondant a la valeur analogique [0...3.3V]
+         => 65 pour la ligne la plus haute             
+     */
+
+    /* Calcul des nouvelles valeurs des courbes avant presentation
+       => Remise a zero des nombres d'echantillons car en debut de la periode
+     */
+    g__analog_read_1->calculOfValuesCurves(false);
+
+    // Prise des valeurs pour presentation
+    ST_ANALOG_VALUES_CURVES l__analog_values_curves;
+    memset(&l__analog_values_curves, '\0', sizeof(ST_ANALOG_VALUES_CURVES));
+    g__analog_read_1->getValuesCurves(&l__analog_values_curves);
+
+    // Presentation des valeurs moyennes des min, moyenne et max
+    Paint_Presentation_ValueInCurves("Min",     l__analog_values_curves.nbr_samples, l__analog_values_curves.analogVolts_min.value, &l__analog_values_curves.analogVolts_min.position, WHITE);
+    Paint_Presentation_ValueInCurves("Max",     l__analog_values_curves.nbr_samples, l__analog_values_curves.analogVolts_max.value, &l__analog_values_curves.analogVolts_max.position, RED);
+    Paint_Presentation_ValueInCurves("Avg",     l__analog_values_curves.nbr_samples, l__analog_values_curves.analogVolts_avg.value, &l__analog_values_curves.analogVolts_avg.position, GREEN);
+    Paint_Presentation_ValueInCurves("Current", l__analog_values_curves.nbr_samples, l__analog_values_curves.analogVolts.value,     &l__analog_values_curves.analogVolts.position,     YELLOW);
+
+    if (l__enum_period == ENUM_MI_PERIOD_DONE) {
+      Paint_DrawLine(231, 65, 231, 98, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID, true);
+
+      Paint_ShiftAndRefreshScreenVirtual(true);
+    }
+    else {
+      Paint_ShiftAndRefreshScreenVirtual();
+    }
+  }
+  else {
+    //Serial.printf("Paint::Paint_UpdateLcdFromScreenVirtual(%d): In the range\n", i__force_updating);
+
+    // Horodatage de l'echelle
+    char l__text[32];
+    sprintf(l__text, "   %02uH%02u",
+      (unsigned int)(g__date_time->getRtcSecInDayLocal() / 3600L),
+      (unsigned int)((g__date_time->getRtcSecInDayLocal() % 3600L) / 60L));
+
+    Serial.printf("Paint::Paint_UpdateLcdFromScreenVirtual(%d): [%s]\n", i__force_updating, l__text);
+
+    // Effacement eventuel des 3 precedents caracteres ;-)
+    Paint_DrawString_EN(217 - 3 * (Font8.Width), 101, l__text, &Font8, BLACK, WHITE, true);
+
+    /* Calcul des nouvelles valeurs des courbes avant presentation
+       => Pas de remise a zero des nombres d'echantillons car dans la periode
+     */
+    g__analog_read_1->calculOfValuesCurves(true);
+
+    // Prise des valeurs pour presentation
+    ST_ANALOG_VALUES_CURVES l__analog_values_curves;
+    memset(&l__analog_values_curves, '\0', sizeof(ST_ANALOG_VALUES_CURVES));
+    g__analog_read_1->getValuesCurves(&l__analog_values_curves);
+
+    // Presentation des valeurs moyennes des min, moyenne et max
+    Paint_Presentation_ValueInCurves("Min",     l__analog_values_curves.nbr_samples, l__analog_values_curves.analogVolts_min.value, &l__analog_values_curves.analogVolts_min.position, WHITE);
+    Paint_Presentation_ValueInCurves("Max",     l__analog_values_curves.nbr_samples, l__analog_values_curves.analogVolts_max.value, &l__analog_values_curves.analogVolts_max.position, RED);
+    Paint_Presentation_ValueInCurves("Avg",     l__analog_values_curves.nbr_samples, l__analog_values_curves.analogVolts_avg.value, &l__analog_values_curves.analogVolts_avg.position, GREEN);
+    Paint_Presentation_ValueInCurves("Current", l__analog_values_curves.nbr_samples, l__analog_values_curves.analogVolts.value,     &l__analog_values_curves.analogVolts.position,     YELLOW);
+
+    // Barre verticale de l'echelle
+    if (i__force_updating == false) {
+#if USE_PAINT_LINE
+      Paint_DrawLine(231, 65, 231, 98, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID, true);
+#else
+      Paint_DrawSymbol(230, 65, 0, &Font16Symbols, BLACK, BLACK, true);
+      Paint_DrawSymbol(230, 65 + 16 + 1, 0, &Font16Symbols, BLACK, BLACK, true);
+#endif
+    }
+    else {
+#if USE_PAINT_LINE
+      Paint_DrawLine(231, 65, 231, 98, YELLOW, DOT_PIXEL_1X1, LINE_STYLE_SOLID, true);
+#else
+      Paint_DrawSymbol(230, 65, 1, &Font16Symbols, BLACK, YELLOW, true);
+      Paint_DrawSymbol(230, 65 + 16 + 1, 1, &Font16Symbols, BLACK, YELLOW, true);
+#endif
+    }
+
+    Paint_ShiftAndRefreshScreenVirtual(true);
+  }
+}
+
+void Paint::Paint_Presentation_ValueInCurves(const char *i__label, unsigned int i__nbr_samples, float i__value, int *io__position, UWORD Color_Foreground)
+{
+  //Serial.printf("Paint::Paint_Presentation_ValueInCurves(\"%s\", #%u, [%0.1f], 0x%x)\n", i__label, i__nbr_samples, i__value, Color_Foreground);
+
+  int l__position = 0;
+
+  // Protection si valeur negative
+  if (i__value <= 0.0) {
+    i__value = 0.0;
+  }                             
+
+  // Arrondi naturel...
+  l__position = (int)((i__value / 100.0) + 0.5);
+
+  // Protection si valeur au dela du max de la font 33x11 des symboles
+  if (l__position > 32) {
+    l__position = 32;
+  }
+
+  /* Pour ne pas effacer la ligne horizontale 50%, changement de 'Y' si 'l__position' = 16
+     par rapport a la valeur precedente...
+   */
+  if (l__position == 16) {
+    l__position = (l__position > *io__position) ? 17 : 15;
+  }
+
+  Paint_DrawSymbol(230, 65, l__position, &Font33Symbols, TRANSPARENCY, Color_Foreground, true);
+
+  *io__position = l__position;
+}
 
 GestionLCD::GestionLCD()
 {
@@ -1068,4 +1279,3 @@ GestionLCD::~GestionLCD()
 {
 	Serial.printf("GestionLCD::~GestionLCD()\n");
 }
-

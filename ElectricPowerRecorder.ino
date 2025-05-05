@@ -1,4 +1,4 @@
-// $Id: ElectricPowerRecorder.ino,v 1.10 2025/04/16 14:27:47 administrateur Exp $
+// $Id: ElectricPowerRecorder.ino,v 1.27 2025/05/05 16:31:25 administrateur Exp $
 
 /* Projet: ElectricPowerRecorder
 
@@ -8,6 +8,9 @@
    2025/03/30
       - Configuration de la date et heure au moyen du bouton sur l'ESP32-S3-GEEK
         => Creation d'une classe 'ConfigRTC' qui prend en charge cette configuration
+
+   2025/04/20
+      - Implementation de la gestion de la SDCard
 */
 
 #if USE_SIMULATION
@@ -36,7 +39,7 @@
 #include "ElectricPowerRecorder.h"
 #endif
 
-#define PROMPT      "ElectricPowerRecorder 2025/04/16 V1.1"
+#define PROMPT      "ElectricPowerRecorder 2025/05/05 V1.1"
 
 #define USE_INCOMING_CMD    1
 
@@ -78,7 +81,8 @@ OneButton     *g__button = NULL;
 GestionLCD    *g__gestion_lcd = NULL;
 DateTime      *g__date_time = NULL;
 ConfigRTC     *g__config_rtc = NULL;
-AnalogRead    *g__analog_read = NULL;
+
+AnalogRead    *g__analog_read_1 = NULL;
 
 #if USE_INCOMING_CMD
 size_t        g__count = 0;
@@ -189,11 +193,11 @@ void callback_exec_chenillard()
 
   if (g__chenillard & 0x0001) {
     g__state_leds |= STATE_LED_GREEN;
-    g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_GREEN_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font24Symbols, BLACK, GREEN);
+    g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_GREEN_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, GREEN);
   }
   else {
     g__state_leds &= ~STATE_LED_GREEN;
-    g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_GREEN_X, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font24Symbols, BLACK, GREEN);
+    g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_GREEN_X, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, GREEN);
   }
 
   g__timers->start(TIMER_CHENILLARD, DURATION_TIMER_CHENILLARD, &callback_exec_chenillard);
@@ -268,12 +272,12 @@ void callback_sdcard_retry_init()
 
 void callback_end_sdcard_acces() {
   g__state_leds &= ~STATE_LED_YELLOW;
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_YELLOW_X, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font24Symbols, BLACK, YELLOW);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_YELLOW_X, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, YELLOW);
 } 
   
 void callback_end_sdcard_error() {
   g__state_leds &= ~STATE_LED_RED;
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_RED_X, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font24Symbols, BLACK, RED);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_RED_X, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, RED);
 }
   
 void callback_sdcard_init_error()
@@ -281,7 +285,7 @@ void callback_sdcard_init_error()
   g__state_leds |= STATE_LED_RED;
 
   g__timers->start(TIMER_SDCARD_INIT_ERROR, DURATION_TIMER_SDCARD_INIT_ERROR, &callback_sdcard_init_error);
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_RED_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font24Symbols, BLACK, RED);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_RED_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, RED);
 }
 
 /* Test the LEDs on before processing
@@ -295,39 +299,39 @@ void callback_sdcard_init_error()
 */
 void testSymbology()
 {
-  g__gestion_lcd->Paint_DrawString_EN(28, 92, "RTC", &Font16, BLACK, WHITE);
-  g__gestion_lcd->Paint_DrawString_EN(120, 92, "SDCard", &Font16, BLACK, WHITE);
+  g__gestion_lcd->Paint_DrawString_EN(6, 116, "RTC", &Font16, BLACK, WHITE);
+  g__gestion_lcd->Paint_DrawString_EN(95, 116, "SD", &Font16, BLACK, WHITE);
 
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_GREEN_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font24Symbols, BLACK, GREEN);
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_YELLOW_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font24Symbols, BLACK, YELLOW);
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_RED_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font24Symbols, BLACK, RED);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_GREEN_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, GREEN);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_YELLOW_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, YELLOW);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_RED_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, RED);
 
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_GREEN_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font24Symbols, BLACK, GREEN);
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_YELLOW_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font24Symbols, BLACK, YELLOW);
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_RED_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font24Symbols, BLACK, RED);
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_BLUE_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font24Symbols, BLACK, BLUE);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_GREEN_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, GREEN);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_YELLOW_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, YELLOW);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_RED_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, RED);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_BLUE_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, BLUE);
 
   delay(1000);
 
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_BLUE_X, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font24Symbols, BLACK, BLUE);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_BLUE_X, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, BLUE);
   delay(500);
 
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_RED_X, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font24Symbols, BLACK, RED);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_RED_X, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, RED);
   delay(500);
 
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_YELLOW_X, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font24Symbols, BLACK, YELLOW);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_YELLOW_X, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, YELLOW);
   delay(500);
 
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_GREEN_X, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font24Symbols, BLACK, GREEN);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_GREEN_X, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, GREEN);
   delay(500);
 
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_RED_X, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font24Symbols, BLACK, RED);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_RED_X, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, RED);
   delay(500);
 
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_YELLOW_X, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font24Symbols, BLACK, YELLOW);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_YELLOW_X, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, YELLOW);
   delay(500);
 
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_GREEN_X, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font24Symbols, BLACK, GREEN);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_GREEN_X, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, GREEN);
   delay(500);
 }
 
@@ -348,47 +352,84 @@ void initLcd()
   g__gestion_lcd->clear(BLACK);
 }
 
-void readAndDrawElectricPower()
+void readAndDrawElectricPower(AnalogRead *i__analog_read, UWORD i__y)
 {
   char l__text_for_lcd[32];
   memset(l__text_for_lcd, '\0', sizeof(l__text_for_lcd));
 
-  bool l__new_values = g__analog_read->readValue();
+  bool l__new_values = i__analog_read->readValue();
 
   if (l__new_values) {  
-    g__analog_read->formatValueCurrent(ANALOG_MIN, l__text_for_lcd);
-    g__gestion_lcd->Paint_DrawString_EN(6, 29, l__text_for_lcd, &Font16, BLACK, WHITE);
+    i__analog_read->formatValueCurrent(ANALOG_MIN, l__text_for_lcd);
+    g__gestion_lcd->Paint_DrawString_EN(6 + 5, i__y, l__text_for_lcd, &Font16, BLACK, WHITE);
 
-    g__analog_read->formatValueCurrent(ANALOG_AVG, l__text_for_lcd);
-    g__gestion_lcd->Paint_DrawString_EN(6 + (11 * 5), 29, l__text_for_lcd, &Font16, BLACK, GREEN);
-  
-    g__analog_read->formatValueCurrent(ANALOG_MAX, l__text_for_lcd);
-    g__gestion_lcd->Paint_DrawString_EN(6 + (11 * 10), 29, l__text_for_lcd, &Font16, BLACK, RED);
-  
-    g__analog_read->formatValueCurrent(ANALOG_SNAPSHOT, l__text_for_lcd);
-    g__gestion_lcd->Paint_DrawString_EN(6 + (11 * 16), 29, l__text_for_lcd, &Font16, BLACK, YELLOW);
+    // Presentation dans l'ordre croissant des valeurs...
+    if (i__analog_read->getValueCurrent(ANALOG_AVG) < i__analog_read->getValueCurrent(ANALOG_SNAPSHOT)) {
+      i__analog_read->formatValueCurrent(ANALOG_AVG, l__text_for_lcd);
+      g__gestion_lcd->Paint_DrawString_EN(6 + 5 + (11 * 5), i__y, l__text_for_lcd, &Font16, BLACK, GREEN);
 
-    if (g__analog_read->getNbrSamples() > 1) {
-      // Min
-      g__gestion_lcd->Paint_DrawBarGraph(g__analog_read->getValuePrevious(ANALOG_MIN), g__analog_read->getValueMax(), 12, &Font16Symbols, GRAY);
-      g__gestion_lcd->Paint_DrawBarGraph(g__analog_read->getValueCurrent(ANALOG_MIN), g__analog_read->getValueMax(), 12, &Font16Symbols, WHITE);
+      i__analog_read->formatValueCurrent(ANALOG_SNAPSHOT, l__text_for_lcd);
+      g__gestion_lcd->Paint_DrawString_EN(6 + 5 + (11 * 10), i__y, l__text_for_lcd, &Font16, BLACK, YELLOW);
+    }
+    else {
+      i__analog_read->formatValueCurrent(ANALOG_SNAPSHOT, l__text_for_lcd);
+      g__gestion_lcd->Paint_DrawString_EN(6 + 5 + (11 * 5), i__y, l__text_for_lcd, &Font16, BLACK, YELLOW);
+
+      i__analog_read->formatValueCurrent(ANALOG_AVG, l__text_for_lcd);
+      g__gestion_lcd->Paint_DrawString_EN(6 + 5 + (11 * 10), i__y, l__text_for_lcd, &Font16, BLACK, GREEN);
+    }
+    // Fin: Presentation dans l'ordre croissant des valeurs...
+
+    i__analog_read->formatValueCurrent(ANALOG_MAX, l__text_for_lcd);
+    g__gestion_lcd->Paint_DrawString_EN(6 + 5 + (11 * 15), i__y, l__text_for_lcd, &Font16, BLACK, RED);
+
+    if (i__analog_read->getNbrSamples() > 1) {
+      // Effacement de la valeur courante avant toute chose
+      g__gestion_lcd->Paint_DrawBarGraph(i__y + 16, i__analog_read->getValuePrevious(ANALOG_SNAPSHOT), i__analog_read->getValueMax(), 12, &Font16Symbols, GRAY);
 
       // Moyenne
-      g__gestion_lcd->Paint_DrawBarGraph(g__analog_read->getValuePrevious(ANALOG_AVG), g__analog_read->getValueMax(), 12, &Font16Symbols, GRAY);
-      g__gestion_lcd->Paint_DrawBarGraph(g__analog_read->getValueCurrent(ANALOG_AVG), g__analog_read->getValueMax(), 12, &Font16Symbols, GREEN);
+      g__gestion_lcd->Paint_DrawBarGraph(i__y + 16, i__analog_read->getValuePrevious(ANALOG_AVG), i__analog_read->getValueMax(), 13, &Font16Symbols, GRAY);
+      g__gestion_lcd->Paint_DrawBarGraph(i__y + 16, i__analog_read->getValueCurrent(ANALOG_AVG), i__analog_read->getValueMax(), 13, &Font16Symbols, GREEN);
+
+      // Min
+      g__gestion_lcd->Paint_DrawBarGraph(i__y + 16, i__analog_read->getValuePrevious(ANALOG_MIN), i__analog_read->getValueMax(), 13, &Font16Symbols, GRAY);
+      g__gestion_lcd->Paint_DrawBarGraph(i__y + 16, i__analog_read->getValueCurrent(ANALOG_MIN), i__analog_read->getValueMax(), 13, &Font16Symbols, WHITE);
 
       // Max
-      g__gestion_lcd->Paint_DrawBarGraph(g__analog_read->getValuePrevious(ANALOG_MAX), g__analog_read->getValueMax(), 12, &Font16Symbols, GRAY);
-      g__gestion_lcd->Paint_DrawBarGraph(g__analog_read->getValueCurrent(ANALOG_MAX), g__analog_read->getValueMax(), 12, &Font16Symbols, RED);
+      g__gestion_lcd->Paint_DrawBarGraph(i__y + 16, i__analog_read->getValuePrevious(ANALOG_MAX), i__analog_read->getValueMax(), 13, &Font16Symbols, GRAY);
+      g__gestion_lcd->Paint_DrawBarGraph(i__y + 16, i__analog_read->getValueCurrent(ANALOG_MAX), i__analog_read->getValueMax(), 13, &Font16Symbols, RED);
 
-      // Snapshot
-      g__gestion_lcd->Paint_DrawBarGraph(g__analog_read->getValuePrevious(ANALOG_SNAPSHOT), g__analog_read->getValueMax(), 11, &Font16Symbols, GRAY);
-      g__gestion_lcd->Paint_DrawBarGraph(g__analog_read->getValueCurrent(ANALOG_SNAPSHOT), g__analog_read->getValueMax(), 11, &Font16Symbols, YELLOW);
+      // Raffraichissement de la valeur courante apres toute chose
+      g__gestion_lcd->Paint_DrawBarGraph(i__y + 16, i__analog_read->getValueCurrent(ANALOG_SNAPSHOT), i__analog_read->getValueMax(), 12, &Font16Symbols, YELLOW);
     }
   }
 
-  sprintf(l__text_for_lcd, "#%lu", g__analog_read->getNbrSamples());
-  g__gestion_lcd->Paint_DrawString_EN(6, 71, l__text_for_lcd, &Font16, BLACK, (l__new_values == true) ? YELLOW : GREEN);
+#if 0
+  sprintf(l__text_for_lcd, "#%lu", i__analog_read->getNbrSamples());
+  g__gestion_lcd->Paint_DrawString_EN(6, i__y, l__text_for_lcd, &Font16, BLACK, (l__new_values == true) ? YELLOW : GREEN);
+#endif
+}
+
+void initCurvesSpace()
+{
+#if 0
+  g__gestion_lcd->Paint_DrawBarGraph(65, &Font16Symbols, GRAY, true);
+  g__gestion_lcd->Paint_DrawBarGraph(65 + 16, &Font16Symbols, GRAY, true);
+
+  g__gestion_lcd->Paint_DrawString_EN(10, 102, "10H45", &Font8, BLACK, WHITE, true);
+  g__gestion_lcd->Paint_DrawString_EN(110, 102, "10H50", &Font8, BLACK, WHITE, true);
+  g__gestion_lcd->Paint_DrawString_EN(210, 102, "10H55", &Font8, BLACK, WHITE, true);
+
+  // Centrage de la ligne verticale au milieu des 5 caracteres (ie. "10H45")
+  g__gestion_lcd->Paint_DrawSymbol(10 + (2 * 5) - (11 / 2) + 2, 65, 11, &Font16Symbols, TRANSPARENCY, BLACK, true);
+  g__gestion_lcd->Paint_DrawSymbol(10 + (2 * 5) - (11 / 2) + 2, 65 + 16, 11, &Font16Symbols, TRANSPARENCY, BLACK, true);
+
+  g__gestion_lcd->Paint_DrawSymbol(100 + 10 + (2 * 5) - (11 / 2) + 2, 65, 11, &Font16Symbols, TRANSPARENCY, BLACK, true);
+  g__gestion_lcd->Paint_DrawSymbol(100 + 10 + (2 * 5) - (11 / 2) + 2, 65 + 16, 11, &Font16Symbols, TRANSPARENCY, BLACK, true);
+
+  g__gestion_lcd->Paint_DrawSymbol(2 * 100 + 10 + (2 * 5) - (11 / 2) + 2, 65, 11, &Font16Symbols, TRANSPARENCY, BLACK, true);
+  g__gestion_lcd->Paint_DrawSymbol(2 * 100 + 10 + (2 * 5) - (11 / 2) + 2, 65 + 16, 11, &Font16Symbols, TRANSPARENCY, BLACK, true);
+#endif
 }
 
 void setup()
@@ -449,7 +490,23 @@ void setup()
 
   g__config_rtc = new ConfigRTC();
 
-  g__analog_read = new AnalogRead();
+  g__analog_read_1 = new AnalogRead(PIN_ADC_CH1);
+
+  // Bargraphe des valeurs min, avg, max et courante
+  g__gestion_lcd->Paint_DrawBarGraph(29 + 16, &Font16Symbols, GRAY);
+
+  /* Bargraphe des courbes min, avg, max et courante avec heurodage
+     - Affichage du fond
+     - Mise a jour dans un ecran virtuel afin d'appliquer un decalage a gauche
+       toutes les xxx secondes
+     - Raffraichissemnt a partir de l'ecran virtuel
+   */
+  initCurvesSpace();
+
+  /* Test Paint::Paint_DrawLine(UWORD Xstart, UWORD Ystart, UWORD Xend, UWORD Yend, 
+                    UWORD Color, DOT_PIXEL Line_width, LINE_STYLE Line_Style)
+   */
+  //g__gestion_lcd->Paint_DrawLine(230, 125, 230, 132, WHITE, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
 
 #if USE_INCOMING_CMD
   memset(g__incoming_buff, '\0', sizeof(g__incoming_buff));
@@ -491,8 +548,11 @@ void loop()
   }
 
   if (g__flg_expired_500ms) {
+    // Update Epoch from RTC toutes les 500 mS
+    g__date_time->setRtcSecInDayGmt();
+
     g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_BLUE_X, LIGHTS_POSITION_Y,
-      (g__sdcard->getInhAppendGpsFrame() ? LIGHT_FULL_IDX : LIGHT_BORD_IDX), &Font24Symbols, BLACK, BLUE);
+      (g__sdcard->getInhAppendGpsFrame() ? LIGHT_FULL_IDX : LIGHT_BORD_IDX), &Font16Symbols, BLACK, BLUE);
 
     noInterrupts();
     g__flg_expired_500ms = false;
@@ -500,6 +560,28 @@ void loop()
   }
 
   if (g__flg_expired_1_sec) {
+#if USE_SIMULATION
+    // Gestion du nombres de secondes depuis 00h00'00" a partir du RTC
+    Serial.printf("#1: Epoch [%lu] -> [%lu] Sec (%02uh%02u'%02u\" GMT+%d)\n", g__date_time->getRtcSecInDayGmt(), g__date_time->getRtcSecInDayLocal(),
+      (unsigned int)(g__date_time->getRtcSecInDayLocal() / 3600L),           // Heures
+      (unsigned int)((g__date_time->getRtcSecInDayLocal() % 3600L) / 60L),   // Minutes
+      (unsigned int)((g__date_time->getRtcSecInDayLocal() % 3600L) % 60L),   // Secondes
+      g__date_time->getRtcSecInDayOffset());
+
+    /* Calcul de la plage [begin, ..., end] correspondant au debut et a la fin la periode @ definition
+       => Warning: 'g__date_time->isRtcSecInDayInRange()' gere une bascule...
+                   => Il faut etre sorti de la plage pour un nouveau test significatif
+     */
+#if 0
+    unsigned int l__screen_virtual_period_begin = (unsigned int)((g__date_time->getRtcSecInDayLocal() / SCREEN_VIRTUAL_PERIOD) * SCREEN_VIRTUAL_PERIOD);
+    unsigned int l__screen_virtual_period_end   = (unsigned int)(l__screen_virtual_period_begin + SCREEN_VIRTUAL_PERIOD - 1);
+    Serial.printf("-> Next period range [%u..%u] Sec (%s)\n",
+      l__screen_virtual_period_begin, l__screen_virtual_period_end,
+      (g__date_time->isRtcSecInDayInRange() == true) ? "In the range" : "Out of the range");
+    // Fin: Gestion du nombres de secondes depuis 00h00'00" a partir du RTC
+#endif
+#endif
+
     if (g__config_rtc->isInProgress() == false) {
       char l__text_for_lcd[32];
       memset(l__text_for_lcd, '\0', sizeof(l__text_for_lcd));
@@ -511,17 +593,20 @@ void loop()
         g__gestion_lcd->Paint_DrawString_EN(6, 8, l__text_for_lcd, &Font16, BLACK, GREEN);
 
         g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_YELLOW_X, LIGHTS_POSITION_Y,
-          ((l__epoch % 2L) == 0L) ? LIGHT_BORD_IDX : LIGHT_FULL_IDX, &Font24Symbols, BLACK, YELLOW);
+          ((l__epoch % 2L) == 0L) ? LIGHT_BORD_IDX : LIGHT_FULL_IDX, &Font16Symbols, BLACK, YELLOW);
       }
       else {
         g__date_time->formatDuration(l__text_for_lcd, l__epoch);
         g__gestion_lcd->Paint_DrawString_EN(6 + (11 * 11), 8, l__text_for_lcd, &Font16, BLACK, GREEN);
-        g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_YELLOW_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font24Symbols, BLACK, YELLOW);
+        g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_YELLOW_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, YELLOW);
       }
     }
 
     // Read and presentation of the electric power
-    readAndDrawElectricPower();
+    readAndDrawElectricPower(g__analog_read_1, 29);
+
+    // Affichage des courbes min, moyenne et max horodatees
+    g__gestion_lcd->Paint_UpdateLcdFromScreenVirtual();
 
     noInterrupts();
     g__pass_on_timer = 0;
@@ -556,7 +641,7 @@ void leave()
   delete g__button;
   delete g__rtc;
   delete g__config_rtc;
-  delete g__analog_read;
+  delete g__analog_read_1;
 }
 #endif
 
@@ -691,6 +776,200 @@ void execCommandRTC(char *i__copy_incomming_buff)
 	free(l__work);
 }
 
+void dumpScaleHundred(int i__offset, int i__max)
+{
+#if USE_SIMULATION
+  printf("     ");
+#else
+  Serial.printf("     ");
+#endif
+
+  for (int l__range = (i__offset + 1); l__range <= i__max; l__range += 1) {
+    if ((l__range % 100) != 0) {
+#if USE_SIMULATION
+      printf(" ");
+#else
+      Serial.printf(" ");
+#endif
+    }
+    else {
+#if USE_SIMULATION
+      printf("%d", ((l__range / 100) % 10));
+#else
+      Serial.printf("%d", ((l__range / 100) % 10));
+#endif
+    }
+  }
+
+#if USE_SIMULATION
+  printf("\n");
+#else
+  Serial.printf("\n");
+#endif
+}
+
+void dumpScaleTen(int i__offset, int i__max)
+{
+#if USE_SIMULATION
+  printf("     ");
+#else
+  Serial.printf("     ");
+#endif
+
+  for (int l__range = (i__offset + 1); l__range <= i__max; l__range += 1) {
+    if ((l__range % 10) != 0) {
+#if USE_SIMULATION
+      printf(" ");
+#else
+      Serial.printf(" ");
+#endif
+    }
+    else {
+#if USE_SIMULATION
+      printf("%d", ((l__range / 10) % 10));
+#else
+      Serial.printf("%d", ((l__range / 10) % 10));
+#endif
+    }
+  }
+
+#if USE_SIMULATION
+  printf("\n");
+#else
+  Serial.printf("\n");
+#endif
+}
+
+void dumpScaleUnit(int i__offset, int i__max)
+{
+#if USE_SIMULATION
+  printf("     ");
+#else
+  Serial.printf("     ");
+#endif
+
+  for (int l__range = (i__offset + 1); l__range <= i__max; l__range += 1) {
+#if USE_SIMULATION
+    printf("%d", (l__range % 10));
+#else
+    Serial.printf("%d", (l__range % 10));
+#endif
+  }
+
+#if USE_SIMULATION
+  printf("\n");
+#else
+  Serial.printf("\n");
+#endif
+}
+
+void dumpCache(int i__offset, int i__max)
+{
+#if USE_SIMULATION
+    printf("dumpCache(%d, %d)...\n", i__offset, i__max);
+#else
+    Serial.printf("dumpCache(%d, %d)...\n", i__offset, i__max);
+#endif
+
+  dumpScaleHundred(i__offset, i__max);
+  dumpScaleTen(i__offset, i__max);
+  dumpScaleUnit(i__offset, i__max);
+
+  for (UWORD l__x = 0; l__x < LCD_WIDTH; l__x++) {
+#if USE_SIMULATION
+    printf("%3d [", l__x + 1);
+#else
+    Serial.printf("%3d [", l__x + 1);
+#endif
+
+    for (UWORD l__y = i__offset; l__y < (i__offset + 210) && l__y < 239; l__y += 8) {
+      char l__dump[8 + 1];
+      memset(l__dump, '\0', sizeof(l__dump));
+
+      for (UWORD l__idx = 0; l__idx < 8; l__idx++) {
+        // Presentation "naturelle" (inversion de 'x' et 'y')
+        if (g__gestion_lcd->Paint_GetCache_InUse(l__y + l__idx, l__x) == true) {
+          switch (g__gestion_lcd->Paint_GetCache_Color(l__y + l__idx, l__x)) {
+          case WHITE:  l__dump[l__idx] = 'W'; break;
+          case RED:    l__dump[l__idx] = 'R'; break;
+          case BLUE:   l__dump[l__idx] = 'B'; break;
+          case GREEN:  l__dump[l__idx] = 'V'; break;
+          case YELLOW: l__dump[l__idx] = 'Y'; break;
+          case GRAY:   l__dump[l__idx] = 'G'; break;
+          default:     l__dump[l__idx] = '?'; break;
+          }
+        }
+        else {
+          l__dump[l__idx] = '.';
+        }
+      }
+
+#if USE_SIMULATION
+      printf("%s", l__dump);
+#else
+      Serial.print(l__dump);
+#endif
+    }
+
+#if USE_SIMULATION
+    printf("] %3d\n", l__x + 1);
+#else
+    Serial.printf("] %3d\n", l__x + 1);
+#endif
+  }
+
+  dumpScaleHundred(i__offset, i__max);
+  dumpScaleTen(i__offset, i__max);
+  dumpScaleUnit(i__offset, i__max);
+}
+
+#if USE_SIMULATION
+void dumpScreenVirtual(int i__offset, int i__max)
+{
+#if USE_SIMULATION
+    printf("dumpScreenVirtual(%d, %d)...\n", i__offset, i__max);
+#else
+    Serial.printf("dumpScreenVirtual(%d, %d)...\n", i__offset, i__max);
+#endif
+
+  dumpScaleHundred(i__offset + SCREEN_VIRTUAL_TOP_X - 1, i__max + SCREEN_VIRTUAL_TOP_X - 1);
+  dumpScaleTen(i__offset + SCREEN_VIRTUAL_TOP_X - 1, i__max + SCREEN_VIRTUAL_TOP_X - 1);
+  dumpScaleUnit(i__offset + SCREEN_VIRTUAL_TOP_X - 1, i__max + SCREEN_VIRTUAL_TOP_X - 1);
+
+  for (UWORD l__y = 0; l__y < (SCREEN_VIRTUAL_BOTTOM_Y - SCREEN_VIRTUAL_TOP_Y); l__y++) {
+    printf("%3d [", l__y + 1 + SCREEN_VIRTUAL_TOP_Y - 1);
+
+    for (UWORD l__x = i__offset; l__x < i__max; l__x += 8) {
+      char l__dump[8 + 1];
+      memset(l__dump, '\0', sizeof(l__dump));
+
+      for (UWORD l__idx = 0; l__idx < 8; l__idx++) {
+        if (g__gestion_lcd->Paint_GetScreenVirtual_InUse(l__x + l__idx, l__y) == true) {
+          switch (g__gestion_lcd->Paint_GetScreenVirtual_Color(l__x + l__idx, l__y)) {
+          case WHITE:  l__dump[l__idx] = 'W'; break;
+          case RED:    l__dump[l__idx] = 'R'; break;
+          case BLUE:   l__dump[l__idx] = 'B'; break;
+          case GREEN:  l__dump[l__idx] = 'V'; break;
+          case YELLOW: l__dump[l__idx] = 'Y'; break;
+          case GRAY:   l__dump[l__idx] = 'G'; break;
+          default:     l__dump[l__idx] = '?'; break;
+          }
+        }
+        else {
+          l__dump[l__idx] = '.';
+        }
+      }
+      printf("%s", l__dump);
+    }
+    printf("] %3d\n", l__y + 1 + SCREEN_VIRTUAL_TOP_Y - 1);
+  }
+
+  dumpScaleHundred(i__offset + SCREEN_VIRTUAL_TOP_X - 1, i__max + SCREEN_VIRTUAL_TOP_X - 1);
+  dumpScaleTen(i__offset + SCREEN_VIRTUAL_TOP_X - 1, i__max + SCREEN_VIRTUAL_TOP_X - 1);
+  dumpScaleUnit(i__offset + SCREEN_VIRTUAL_TOP_X - 1, i__max + SCREEN_VIRTUAL_TOP_X - 1);
+}
+#endif
+
 void gestionOfCommands()
 {
   static size_t   g__count = 0;
@@ -719,20 +998,7 @@ void gestionOfCommands()
          l__pattern = strtok(NULL, " ");                   // Get the sub-command
          if (l__pattern != NULL) {
          	if (!strcmp(l__pattern, "cache")) {            // 'cache' sub-command
-            for (UWORD l__x = 0; l__x < LCD_X_SIZE_MAX; l__x++) {
-              for (UWORD l__y = 0; l__y < LCD_Y_SIZE_MAX; l__y += 8) {
-
-                char l__dump[8 + 1];
-                memset(l__dump, '\0', sizeof(l__dump));
-
-                for (UWORD l__idx = 0; l__idx < 8; l__idx++) {
-                  // Presentation "naturelle" (inversion de 'x' et 'y')
-                  l__dump[l__idx] = (g__gestion_lcd->Paint_GetCache(l__y + l__idx, l__x) == true) ? '#' : '.';
-                }
-                Serial.print(l__dump);
-              }
-              Serial.println();
-            }
+            dumpCache(0, 239);
           }
           else {
             	Serial.printf("Unknown sub-command [%s]\n", l__pattern);

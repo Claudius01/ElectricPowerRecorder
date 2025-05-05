@@ -1,4 +1,4 @@
-// $Id: GestionLCD.h,v 1.5 2025/04/16 14:27:47 administrateur Exp $
+// $Id: GestionLCD.h,v 1.19 2025/05/05 16:31:25 administrateur Exp $
 
 #ifndef __GESTION_LCD__
 #define __GESTION_LCD__
@@ -26,25 +26,25 @@
 #include <SPI.h>
 #endif
 
-#define LIGHTS_POSITION_X       10
+#define LIGHTS_POSITION_X       45
 
 // Positions des feux @ RTC
 #define LIGHTS_POSITION_RTC               LIGHTS_POSITION_X
 #define LIGHTS_POSITION_RTC_GREEN_X       LIGHTS_POSITION_RTC
-#define LIGHTS_POSITION_RTC_YELLOW_X      (LIGHTS_POSITION_RTC + 25)
-#define LIGHTS_POSITION_RTC_RED_X         (LIGHTS_POSITION_RTC + 50)
+#define LIGHTS_POSITION_RTC_YELLOW_X      (LIGHTS_POSITION_RTC + 12)
+#define LIGHTS_POSITION_RTC_RED_X         (LIGHTS_POSITION_RTC + 24)
 
 // Positions des feux @ SDCard
-#define LIGHTS_POSITION_SDC               (LIGHTS_POSITION_X + 100)
+#define LIGHTS_POSITION_SDC               (LIGHTS_POSITION_X + 78)
 #define LIGHTS_POSITION_SDC_GREEN_X       LIGHTS_POSITION_SDC
-#define LIGHTS_POSITION_SDC_YELLOW_X      (LIGHTS_POSITION_SDC + 25)
-#define LIGHTS_POSITION_SDC_RED_X         (LIGHTS_POSITION_SDC + 50)
-#define LIGHTS_POSITION_SDC_BLUE_X        (LIGHTS_POSITION_SDC + 75)
+#define LIGHTS_POSITION_SDC_YELLOW_X      (LIGHTS_POSITION_SDC + 12)
+#define LIGHTS_POSITION_SDC_RED_X         (LIGHTS_POSITION_SDC + 24)
+#define LIGHTS_POSITION_SDC_BLUE_X        (LIGHTS_POSITION_SDC + 36)
 
-#define LIGHTS_POSITION_Y       108
+#define LIGHTS_POSITION_Y       115
 
-#define LIGHT_FULL_IDX          0
-#define LIGHT_BORD_IDX          1
+#define LIGHT_FULL_IDX          14
+#define LIGHT_BORD_IDX          15
 
 #define UBYTE   uint8_t
 #define UWORD   uint16_t
@@ -260,11 +260,33 @@ typedef struct {
     UBYTE  Sec;   // 0 - 59
 } PAINT_TIME;
 
+/* Definitions pour l'ecran virtuel
+ */
+#define SCREEN_VIRTUAL_SCALE_PIXELS   100          // 100 pixels entre les echelles
+
+#define SCREEN_VIRTUAL_TOP_X          1
+#define SCREEN_VIRTUAL_TOP_Y          64
+#define SCREEN_VIRTUAL_BOTTOM_X      (255 + 1)     // Multiple de 8 + Place pour ecrire une fonte 16x11 et la decaler a gauche 
+#define SCREEN_VIRTUAL_BOTTOM_Y      109           // Derniere ligne de la fonte 8x5
+
+/* Definitions pour le decalage avec un marquage des echelles tous les 100 pixels (cf. 'SCREEN_VIRTUAL_SCALE_PIXELS')
+   - 100 * SCREEN_VIRTUAL_PERIOD_SHIFT = SCREEN_VIRTUAL_PERIOD
+ */
+//#define SCREEN_VIRTUAL_PERIOD        60L                                                   // Echelle de 1'
+//#define SCREEN_VIRTUAL_PERIOD        300L                                                   // Echelle de 5'
+#define SCREEN_VIRTUAL_PERIOD        900L                                                   // Echelle de 15'
+//#define SCREEN_VIRTUAL_PERIOD        3600L                                                  // Echelle de 1H
+//#define SCREEN_VIRTUAL_PERIOD        (6 * 3600L)                                            // Echelle de 6H
+
+#define SCREEN_VIRTUAL_PERIOD_SHIFT  (SCREEN_VIRTUAL_PERIOD / SCREEN_VIRTUAL_SCALE_PIXELS)  // Decalage toutes les 3 secondes
+// Fin: Definitions pour l'ecran virtuel
+
 class Paint : public LCD {
 	private:
 		volatile PAINT    m__paint;     // TBC: 'volatile'
 
     UWORD             m__cache_color[LCD_X_SIZE_MAX][LCD_Y_SIZE_MAX];    // m__cache_color[x-1][y-1] after rotation
+    UWORD             m__screen_virtual[SCREEN_VIRTUAL_BOTTOM_X - SCREEN_VIRTUAL_TOP_X][SCREEN_VIRTUAL_BOTTOM_Y - SCREEN_VIRTUAL_TOP_Y];
 
 	public:
 		Paint();
@@ -274,20 +296,20 @@ class Paint : public LCD {
 		void Paint_SelectImage(UBYTE *image);
 		void Paint_SetRotate(UWORD Rotate);
 		void Paint_SetMirroring(UBYTE mirror);
-		void Paint_SetPixel(UWORD Xpoint, UWORD Ypoint, UWORD Color);
+		void Paint_SetPixel(UWORD Xpoint, UWORD Ypoint, UWORD Color, bool i__flg_screen_virtual = false);
 
 		void Paint_Clear(UWORD Color);
 		void Paint_ClearWindows(UWORD Xstart, UWORD Ystart, UWORD Xend, UWORD Yend, UWORD Color);
 
 		// Drawing
-		void Paint_DrawPoint(UWORD Xpoint, UWORD Ypoint, UWORD Color, DOT_PIXEL Dot_Pixel, DOT_STYLE Dot_FillWay);
-		void Paint_DrawLine(UWORD Xstart, UWORD Ystart, UWORD Xend, UWORD Yend, UWORD Color, DOT_PIXEL Line_width, LINE_STYLE Line_Style);
+		void Paint_DrawPoint(UWORD Xpoint, UWORD Ypoint, UWORD Color, DOT_PIXEL Dot_Pixel, DOT_STYLE Dot_FillWay, bool i__flg_screen_virtual = false);
+		void Paint_DrawLine(UWORD Xstart, UWORD Ystart, UWORD Xend, UWORD Yend, UWORD Color, DOT_PIXEL Line_width, LINE_STYLE Line_Style, bool i__flg_screen_virtual = false);
 		void Paint_DrawRectangle(UWORD Xstart, UWORD Ystart, UWORD Xend, UWORD Yend, UWORD Color, DOT_PIXEL Line_width, DRAW_FILL Filled );
 		void Paint_DrawCircle(UWORD X_Center, UWORD Y_Center, UWORD Radius, UWORD Color, DOT_PIXEL Line_width, DRAW_FILL Draw_Fill );
 
 		// Display string
-		void Paint_DrawChar(UWORD Xstart, UWORD Ystart, const char Acsii_Char, sFONT* Font, UWORD Color_Background, UWORD Color_Foreground);
-		void Paint_DrawString_EN(UWORD Xstart, UWORD Ystart, const char * pString, sFONT* Font, UWORD Color_Background, UWORD Color_Foreground);
+		void Paint_DrawChar(UWORD Xstart, UWORD Ystart, const char Acsii_Char, sFONT* Font, UWORD Color_Background, UWORD Color_Foreground, bool i__flg_screen_virtual = false);
+		void Paint_DrawString_EN(UWORD Xstart, UWORD Ystart, const char * pString, sFONT* Font, UWORD Color_Background, UWORD Color_Foreground, bool i__flg_screen_virtual = false);
 		void Paint_DrawNum(UWORD Xpoint, UWORD Ypoint, int32_t Nummber, sFONT* Font, UWORD Color_Background, UWORD Color_Foreground);
 		void Paint_DrawFloatNum(UWORD Xpoint, UWORD Ypoint, double Nummber,  UBYTE Decimal_Point, sFONT* Font, UWORD Color_Background, UWORD Color_Foreground);
 		void Paint_DrawTime(UWORD Xstart, UWORD Ystart, PAINT_TIME *pTime, sFONT* Font, UWORD Color_Background, UWORD Color_Foreground);
@@ -296,12 +318,23 @@ class Paint : public LCD {
 		void Paint_NewImage(UWORD Width, UWORD Height, UWORD Rotate, UWORD Color);
 		void Paint_DrawImage(const unsigned char *image, UWORD Startx, UWORD Starty, UWORD Endx, UWORD Endy);
 
-		void Paint_DrawSymbol(UWORD Xpoint, UWORD Ypoint, const char Num_Symbol, sFONT* Font, UWORD Color_Background, UWORD Color_Foreground);
+		void Paint_DrawSymbol(UWORD Xpoint, UWORD Ypoint, const char Num_Symbol, sFONT* Font, UWORD Color_Background, UWORD Color_Foreground, bool i__flg_screen_virtual = false);
 
     // Analyse du cache
-    bool Paint_GetCache(UWORD i__x, UWORD i__y) { return (m__cache_color[i__x][i__y] != BLACK ? true : false); };
+    bool Paint_GetCache_InUse(UWORD i__x, UWORD i__y) { return (m__cache_color[i__x][i__y] != BLACK ? true : false); };
+    UWORD Paint_GetCache_Color(UWORD i__x, UWORD i__y) { return m__cache_color[i__x][i__y]; };
 
-    void Paint_DrawBarGraph(int i__value, int i__value_max, int i__index, sFONT* Font, UWORD Color_Foreground);
+    void Paint_DrawBarGraph(UWORD i__y, sFONT* Font, UWORD Color_Foreground, bool i__flg_screen_virtual = false);
+    void Paint_DrawBarGraph(UWORD i__y, int i__value, int i__value_max, int i__index, sFONT* Font, UWORD Color_Foreground);
+
+    // Gestion de l'ecran virtuel
+    bool Paint_GetScreenVirtual_InUse(UWORD i__x, UWORD i__y) { return (m__screen_virtual[i__x][i__y] != BLACK ? true : false); };
+    UWORD Paint_GetScreenVirtual_Color(UWORD i__x, UWORD i__y) { return m__screen_virtual[i__x][i__y]; };
+    void Paint_ShiftAndRefreshScreenVirtual(bool i__force_shift = false);
+    void Paint_ClearScreenVirtual();
+    void Paint_UpdateLcdFromScreenVirtual(bool i__force_updating = false);
+
+    void Paint_Presentation_ValueInCurves(const char *i__label, unsigned int i__nbr_samples, float i__value, int *io__position, UWORD Color_Foreground);
 };
 // Fin: Code tire de 'GUI_Paint.h'
 

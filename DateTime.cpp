@@ -1,4 +1,4 @@
-// $Id: DateTime.cpp,v 1.1 2025/03/30 18:09:46 administrateur Exp $
+// $Id: DateTime.cpp,v 1.5 2025/05/05 16:31:25 administrateur Exp $
 
 #if USE_SIMULATION
 #include <cstdio>
@@ -13,6 +13,7 @@
 #endif
 
 #include "Misc.h"
+#include "GestionLCD.h"
 #include "DateTime.h"
 
 static byte                 g__monthDays[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
@@ -40,7 +41,8 @@ static ST_FOR_SOMMER_TIME_CHANGE   g__st_for_sommer_time_change = {
   }
 };
 
-DateTime::DateTime() : flg_rtc_init(false), epoch_start(0L),epoch(0), epoch_diff(0L), duration_deconnexion(0L)
+DateTime::DateTime() : flg_rtc_init(false), epoch_start(0L),epoch(0), epoch_diff(0L), duration_deconnexion(0L),
+                       epoch_rtc_gmt(0L), epoch_rtc_offset(0)
 {
 	Serial.println("DateTime::DateTime()");
 }
@@ -336,7 +338,7 @@ bool DateTime::setSommerWinterTimeChange(ST_DATE_AND_TIME *i__dateAndTime)
 
   if (l__flg_available_sommer == true && l__flg_available_winter == true) {
     g__st_for_sommer_time_change.flg_available = true;
-  }
+ }
   else {
     g__st_for_sommer_time_change.flg_available = false;
   }
@@ -418,15 +420,20 @@ ENUM_SOMMER_WINTER DateTime::getSommerWinterTimeChange(ST_DATE_AND_TIME *i__date
 
 void DateTime::applySommerWinterHour(ST_DATE_AND_TIME *io__dateAndTime_presentation)
 {
+  static bool g__call_apply_sommer_winter_hour = false;
+
   byte l__nbr_hours = 0;
+
   if (io__dateAndTime_presentation->sommer_winter == WINTER) {
     l__nbr_hours += 1;
+    epoch_rtc_offset = 1;
 
     // Update for statistics
     //g__stats->setOffsetSeconds(3600);
   }
   else if (io__dateAndTime_presentation->sommer_winter == SOMMER) {
     l__nbr_hours += 2;
+    epoch_rtc_offset = 2;
 
     // Update for statistics
     //g__stats->setOffsetSeconds(2 * 3600);
@@ -457,6 +464,16 @@ void DateTime::applySommerWinterHour(ST_DATE_AND_TIME *io__dateAndTime_presentat
         io__dateAndTime_presentation->year += 1;
       }
     }
+  }
+
+  /* Maj de l'heure locale 1! seule fois
+    - Effacement et forcage des infos de l'ecran virtuel
+  */
+  if (g__call_apply_sommer_winter_hour == false) {
+    g__gestion_lcd->Paint_ClearScreenVirtual();
+    g__gestion_lcd->Paint_UpdateLcdFromScreenVirtual(true);
+
+    g__call_apply_sommer_winter_hour = true;
   }
 }
 
@@ -496,6 +513,88 @@ void DateTime::formatDuration(char *o__buffer, long i__value) const
     sprintf(o__buffer, ">99J %02lu:%02lu",
       (i__value % (24L * 3600L) / 3600L), (i__value % 3600L) / 60L);
   }
+}
+
+void DateTime::setRtcSecInDayGmt()
+{
+  unsigned long l__epoch_rtc_gmt = (g__rtc->getEpoch() % 86400L);
+
+  if (l__epoch_rtc_gmt != epoch_rtc_gmt) {
+    epoch_rtc_gmt = l__epoch_rtc_gmt;
+
+    // Trace des Heures/Minutes @ 86400 Sec / Jour
+#if 0
+    unsigned int l__offset = (epoch_rtc_offset * 3600);
+    unsigned long l__epoch_rtc_local = ((epoch_rtc_gmt + l__offset) % 86400L);
+
+    Serial.printf("#2: Epoch [%lu] -> [%lu] Sec (%02uh%02u'%02u\" GMT+%d)\n", getRtcSecInDayGmt(), getRtcSecInDayLocal(),
+      (unsigned int)(l__epoch_rtc_local / 3600L),                               // Heures
+      (unsigned int)((l__epoch_rtc_local % 3600L) / 60L),                       // Minutes
+      (unsigned int)((l__epoch_rtc_local % 3600L) % 60L),   // Secondes
+      epoch_rtc_offset);
+#endif
+  }
+}
+
+ENUM_IN_THE_PERIOD DateTime::isRtcSecInDayInRange() const
+{
+  static bool g__flg_in_the_range    = false;
+  static bool g__flg_in_the_mi_range = false;
+
+  ENUM_IN_THE_PERIOD l__period_rtn = ENUM_PERIOD_NONE;
+
+  unsigned int l__screen_virtual_period_begin    = (unsigned int)((g__date_time->getRtcSecInDayLocal() / SCREEN_VIRTUAL_PERIOD) * SCREEN_VIRTUAL_PERIOD);
+  unsigned int l__screen_virtual_period_end      = (unsigned int)(l__screen_virtual_period_begin + SCREEN_VIRTUAL_PERIOD - 1);
+  unsigned int l__screen_virtual_mi_period_begin = (unsigned int)(l__screen_virtual_period_begin + (l__screen_virtual_period_end - l__screen_virtual_period_begin) / 2);
+  unsigned int l__screen_virtual_mi_period_end   = (unsigned int)(l__screen_virtual_mi_period_begin + SCREEN_VIRTUAL_PERIOD - 1);
+
+  // Version avec la plage complete [begin, ..., end]
+  //return (getRtcSecInDayLocal() >= l__screen_virtual_period_begin && getRtcSecInDayLocal() <= l__screen_virtual_period_end) ? true : false;
+
+  // Version avec la plage limitee a [begin, ..., (begin + 10)] pour ameliorer l'ergonomie ;-)
+  bool l__flg_in_the_range    = (getRtcSecInDayLocal() >= l__screen_virtual_period_begin && getRtcSecInDayLocal() <= (l__screen_virtual_period_begin + 10)) ? true : false;
+  bool l__flg_in_the_mi_range = (getRtcSecInDayLocal() >= l__screen_virtual_mi_period_begin && getRtcSecInDayLocal() <= (l__screen_virtual_mi_period_begin + 5)) ? true : false;
+
+  if (g__flg_in_the_range == false) {
+    if (l__flg_in_the_range == true) {
+      g__flg_in_the_range = true;
+
+    Serial.printf("-> Next period range [%u..%u] Sec (In the range)\n",
+      l__screen_virtual_period_begin, l__screen_virtual_period_end);
+
+    Serial.printf("-> Next mi period range [%u..%u] Sec\n",
+      l__screen_virtual_mi_period_begin, l__screen_virtual_mi_period_end);
+
+      l__period_rtn = ENUM_PERIOD_DONE;
+    }
+  }
+  else {
+    if (l__flg_in_the_range == false) {
+      g__flg_in_the_range = false;
+
+      l__period_rtn = ENUM_PERIOD_NONE;
+    }
+  }
+
+  if (g__flg_in_the_mi_range == false) {
+    if (l__flg_in_the_mi_range == true) {
+      g__flg_in_the_mi_range = true;
+
+    Serial.printf("-> Next mi period range [%u..%u] Sec\n",
+      l__screen_virtual_mi_period_begin, l__screen_virtual_mi_period_end);
+
+      l__period_rtn = ENUM_MI_PERIOD_DONE;
+    }
+  }
+  else {
+    if (l__flg_in_the_mi_range == false) {
+      g__flg_in_the_mi_range = false;
+
+      l__period_rtn = ENUM_PERIOD_NONE;
+    }
+  }
+
+  return l__period_rtn;
 }
 
 void DateTime::getRtcTimeForLcd(char *o__text_for_lcd)

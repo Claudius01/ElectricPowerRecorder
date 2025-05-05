@@ -1,4 +1,4 @@
-// $Id: DateTime.h,v 1.1 2025/03/30 18:09:46 administrateur Exp $
+// $Id: DateTime.h,v 1.4 2025/05/05 16:31:25 administrateur Exp $
 
 #ifndef __DATE_TIME__
 #define __DATE_TIME__
@@ -80,6 +80,12 @@ typedef struct {
 } ST_FOR_SOMMER_TIME_CHANGE;
 // Fin: Définitions pour la détermination du changement d'heure été/hiver
 
+typedef enum {
+  ENUM_PERIOD_NONE = 0,
+  ENUM_MI_PERIOD_DONE,
+  ENUM_PERIOD_DONE
+} ENUM_IN_THE_PERIOD;
+
 class DateTime {
 	private:
     bool flg_rtc_init;
@@ -90,6 +96,9 @@ class DateTime {
 
     long duration_deconnexion;
 
+    unsigned long epoch_rtc_gmt;
+    unsigned int  epoch_rtc_offset;
+ 
 		long my_mktime(ST_TM *timeptr);
 		long calculatedEpochTime(ST_DATE_AND_TIME *i__st_date_and_time);
 		bool setSommerWinterTimeChange(ST_DATE_AND_TIME *i__dateAndTime);
@@ -118,6 +127,12 @@ class DateTime {
     long getDurationDeconnexion() const { return duration_deconnexion; };
     void formatDuration(char *o__buffer, long i__value) const;
     void formatDurationDeconnexion(char *o__buffer) const;
+
+    void          setRtcSecInDayGmt();
+    unsigned long getRtcSecInDayGmt() const { return (epoch_rtc_gmt % 86400L); };
+    unsigned long getRtcSecInDayLocal() const { return ((epoch_rtc_gmt + (epoch_rtc_offset * 3600L)) % 86400L); };
+    unsigned int  getRtcSecInDayOffset() const { return epoch_rtc_offset; };
+    ENUM_IN_THE_PERIOD isRtcSecInDayInRange() const;
 
     void getRtcTimeForLcd(char *o__text_for_lcd);
 };

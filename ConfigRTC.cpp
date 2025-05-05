@@ -1,4 +1,4 @@
-// $Id: ConfigRTC.cpp,v 1.4 2025/04/13 17:25:15 administrateur Exp $
+// $Id: ConfigRTC.cpp,v 1.6 2025/05/04 12:12:16 administrateur Exp $
 
 #if USE_SIMULATION
 #include "ArduinoTypes.h"

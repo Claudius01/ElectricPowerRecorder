@@ -1,4 +1,4 @@
-// $Id: AnalogRead.cpp,v 1.6 2025/04/16 14:27:47 administrateur Exp $
+// $Id: AnalogRead.cpp,v 1.12 2025/05/05 16:31:25 administrateur Exp $
 
 #if USE_SIMULATION
 #include "ArduinoTypes.h"
@@ -13,16 +13,26 @@
 
 #include "AnalogRead.h"
 
-AnalogRead::AnalogRead() : m__samples(0L), m__analogResolution(0), m__valueMax(ANALOG_VALUE_MAX),
+#define USE_TRACE_ANALOG      0
+
+AnalogRead::AnalogRead(int i__adc_channel) : m__adc_channel(i__adc_channel),
+                           m__samples(0L), m__analogResolution(0), m__valueMax(ANALOG_VALUE_MAX),
                            m__analogVoltsValue_avg_float(0.0)
 {
-  Serial.printf("AnalogRead::AnalogRead()\n");
+  Serial.printf("AnalogRead::AnalogRead(%d)\n", m__adc_channel);
 
   memset(&m__st_values_previous, '\0', sizeof(m__st_values_previous));
   memset(&m__st_values_current, '\0', sizeof(m__st_values_current));
 
   m__st_values_previous.analogVoltsValue_min = INT_MAX;
   m__st_values_current.analogVoltsValue_min  = INT_MAX;
+
+  memset(&m__st_values_curves, '\0', sizeof(ST_ANALOG_VALUES_CURVES));
+  m__st_values_curves.analogVolts_min.value    = (float)INT_MAX;
+  m__st_values_curves.analogVolts_min.position = ((ANALOG_VALUE_MAX / 100) - 1);
+  m__st_values_curves.analogVolts_avg.value    = 0.0;
+  m__st_values_curves.analogVolts_max.value    = 0.0;
+  m__st_values_curves.analogVolts_avg.value    = 0.0;
 
   analogReadResolution(ANALOG_RESOLUTION);              // Set ADC resolution to 12 bits (0-4095)
   m__analogResolution = (1 << ANALOG_RESOLUTION) - 1;
@@ -48,8 +58,8 @@ bool AnalogRead::readValue()
   // Conservation des valeurs precedentes pour effaccement de leur presentation
   memcpy(&m__st_values_previous, &m__st_values_current, sizeof(ST_ANALOG_VALUES));
 
-  m__st_values_current.analogOriginalValue = analogRead(PIN_ADC2_CH2);          // Read the ADC raw value
-  m__st_values_current.analogVoltsValue = analogReadMilliVolts(PIN_ADC2_CH2);   // Read ADC voltage values (millivolt range)
+  m__st_values_current.analogOriginalValue = analogRead(m__adc_channel);          // Read the ADC raw value
+  m__st_values_current.analogVoltsValue = analogReadMilliVolts(m__adc_channel);   // Read ADC voltage values (millivolt range)
 
   m__samples++;
 
@@ -65,6 +75,8 @@ bool AnalogRead::readValue()
   m__st_values_current.analogVoltsValue_avg = (int)(m__analogVoltsValue_avg_float + 0.5);
 
   if (memcmp(&m__st_values_previous, &m__st_values_current, sizeof(ST_ANALOG_VALUES))) {
+
+#if USE_TRACE_ANALOG
     Serial.printf("\n");
 
     Serial.printf("New values:\n");
@@ -80,6 +92,7 @@ bool AnalogRead::readValue()
     Serial.printf("#%lu: ADC millivolts value [%d] mV (min [%d] avg [%d] (%.1f) max [%d])\n",
       m__samples, m__st_values_current.analogVoltsValue,
       m__st_values_current.analogVoltsValue_min, m__st_values_current.analogVoltsValue_avg, m__analogVoltsValue_avg_float, m__st_values_current.analogVoltsValue_max);
+#endif
 
     l__flg_rtn = true;
   }
@@ -157,4 +170,46 @@ void AnalogRead::formatValueCurrent(ENUM_ANALOG_VALUES i__type_value, char *o__b
   default:
     break;
   }
+}
+
+void AnalogRead::calculOfValuesCurves(bool i__flg_raz_samples)
+{
+  //Serial.printf("AnalogRead::calculOfValuesCurves(%d)\n", i__flg_raz_samples);
+
+  m__st_values_curves.nbr_samples++;
+
+  // Calcul des valeurs a presenter
+  // Calcul de la moyenne des min sur la periode
+  m__st_values_curves.analogVolts_min.value =
+    ((((m__st_values_curves.nbr_samples - 1) * m__st_values_curves.analogVolts_min.value)
+     +  m__st_values_current.analogVoltsValue_min) / m__st_values_curves.nbr_samples);
+
+  // Calcul de la moyenne des moyennes sur la periode
+  m__st_values_curves.analogVolts_avg.value =
+    ((((m__st_values_curves.nbr_samples - 1) * m__st_values_curves.analogVolts_avg.value)
+      + m__st_values_current.analogVoltsValue_avg) / m__st_values_curves.nbr_samples);
+
+  // Calcul de la moyenne des max sur la periode
+  m__st_values_curves.analogVolts_max.value =
+    ((((m__st_values_curves.nbr_samples - 1) * m__st_values_curves.analogVolts_max.value)
+      + m__st_values_current.analogVoltsValue_max) / m__st_values_curves.nbr_samples);
+
+  // Calcul de la moyenne de l'instantane sur la periode
+  m__st_values_curves.analogVolts.value =
+    ((((m__st_values_curves.nbr_samples - 1) * m__st_values_curves.analogVolts.value)
+      + m__st_values_current.analogVoltsValue) / m__st_values_curves.nbr_samples);
+  // Fin: Calcul des valeurs a presenter
+
+  if (i__flg_raz_samples == true) {
+    /* Remise a 1 du nombre d'echantillons pour tenir compte de la derniere valeur moyennee
+       qui n'aura qu'un poids de 1
+       => TODO: Pas constate dans la realite ?!..
+     */
+    m__st_values_curves.nbr_samples = 1;
+  }
+}
+
+void AnalogRead::getValuesCurves(ST_ANALOG_VALUES_CURVES *o__analog_values_curves)
+{
+  memcpy(o__analog_values_curves, &m__st_values_curves, sizeof(ST_ANALOG_VALUES_CURVES));
 }
