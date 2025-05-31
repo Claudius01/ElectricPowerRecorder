@@ -1,4 +1,4 @@
-// $Id: Timers.cpp,v 1.4 2025/04/15 17:29:31 administrateur Exp $
+// $Id: Timers.cpp,v 1.7 2025/05/25 09:55:12 administrateur Exp $
 
 /* Evolutions:
    - 2025/02/21: Utilisation de 'Serial.printf()'
@@ -32,11 +32,18 @@ static ST_TIMERS        g__st_timers[] =
   { TIMER_SEND_GPSPILOT,      false, "Emission GpsPilot" },
   { TIMER_ACTIVATE_SDCARD,    false, "Activite SDCARD" },
 
-  { TIMER_CONFIG_RTC_SCOLLING, false, "Config RTC Scrolling" },
-  { TIMER_CONFIG_RTC_WAIT_ACQ, false, "Config RTC Wait Acq" },
+#if 0
+  { TIMER_CONFIG_RTC_SCROLLING, false, "Config RTC Scrolling" },
+  { TIMER_CONFIG_RTC_WAIT_ACQ,  false, "Config RTC Wait Acq" },
+#endif
+
+  { TIMER_ANALOG_ACQ,          false, "Analog acq" },
+
+  { TIMER_MENU_SCROLLING,      false, "Menu Scrolling" },
+  { TIMER_MENU_WAIT_ACQ,       false, "Menu Wait Acq" },
 
 #if USE_SIMULATION
-  { TIMER_WATCHDOG,           false, "Watchdog" },
+  { TIMER_WATCHDOG,            false, "Watchdog" },
 #endif
 };
 

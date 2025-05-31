@@ -1,4 +1,4 @@
-// $Id: Misc.h,v 1.1 2025/03/30 18:09:46 administrateur Exp $
+// $Id: Misc.h,v 1.3 2025/05/29 17:37:45 administrateur Exp $
 
 #ifndef __MISC__
 #define __MISC__

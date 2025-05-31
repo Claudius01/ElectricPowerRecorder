@@ -38,6 +38,10 @@
 /* Includes ------------------------------------------------------------------*/
 #include "fonts.h"
 
+#if USE_SIMULATION
+#define PROGMEM									// Mot cle non supporte en simulation
+#endif
+
 const uint8_t Font24_Table [] PROGMEM = 
 {
   // @0 ' ' (17 pixels wide)

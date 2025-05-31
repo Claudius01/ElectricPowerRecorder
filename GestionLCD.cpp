@@ -1,4 +1,4 @@
-// $Id: GestionLCD.cpp,v 1.16 2025/05/05 16:31:25 administrateur Exp $
+// $Id: GestionLCD.cpp,v 1.49 2025/05/31 14:07:20 administrateur Exp $
 
 #if USE_SIMULATION
 #include "ArduinoTypes.h"
@@ -9,6 +9,7 @@
 #endif
 
 #include "DateTime.h"
+#include "Menus.h"
 #include "GestionLCD.h"
 #include "AnalogRead.h"
 
@@ -16,6 +17,9 @@
 
 #if USE_SIMULATION
 using namespace PixelToaster;
+
+bool g__dump_cache_f2 = false;
+bool g__dump_cache_f3 = false;
 #endif
 
 // Code tire de 'DEV_Config.cpp'
@@ -321,19 +325,25 @@ void LCD::LCD_SetUWORD(UWORD x, UWORD y, UWORD Color)
 // Fin: Code tire de 'LCD_Driver.cpp'
 
 // Code tire de 'GUI_Paint.cpp'
-Paint::Paint()
+Paint::Paint() : m__flg_use_cache(false), m__rotate_in_progress(false)
 {
 	Serial.printf("Paint::Paint()\n");
 
   // Initialisation du cache de couleur a 'BLACK'
-  Serial.printf("-> Init. cache (%u x %u) (sizeof %u bytes)\n",
+  Serial.printf("-> Init. cache (        %u x %u) (sizeof %u bytes)\n",
     LCD_X_SIZE_MAX, LCD_Y_SIZE_MAX, (unsigned int)sizeof(m__cache_color));
+  Serial.printf("-> Init. cache previous (%u x %u) (sizeof %u bytes)\n",
+    LCD_X_SIZE_MAX, LCD_Y_SIZE_MAX, (unsigned int)sizeof(m__cache_color_previous));
 
   for (UWORD y = 0; y < LCD_Y_SIZE_MAX; y++) {
     for (UWORD x = 0; x < LCD_X_SIZE_MAX; x++) {
       m__cache_color[x][y] = BLACK;
+
+      m__cache_color_previous[x][y] = BLACK;
     }
   }
+
+  resetCacheStatistics();
 
   // Initialisation de l'ecran virtual a 'BLACK'
   Serial.printf("-> Init. screen virtual (%u x %u) (sizeof %u bytes)\n",
@@ -350,6 +360,68 @@ Paint::Paint()
 Paint::~Paint()
 {
 	Serial.printf("Paint::~GestionLCD()\n");
+}
+
+/* Mise en BLACK de l'ensemble de l'ecran
+   => Reset des statistiques d'utilisation du cache dans la methode 'refreshFromCache()'
+ */
+void Paint::clearScreen()
+{
+  for (UWORD y = 0; y < LCD_Y_SIZE_MAX; y++) {
+    for (UWORD x = 0; x < LCD_X_SIZE_MAX; x++) {
+      m__cache_color[x][y] = BLACK;
+      m__cache_color_previous[x][y] = WHITE;    // Forcage reecriture de tous les pixels a BLACK
+    }
+  }
+
+  refreshFromCache();
+}
+
+void Paint::resetCacheStatistics()
+{
+  memset(&m__statistics, '\0', sizeof(ST_CACHE_STATISTICS));
+
+  m__statistics.percent_min     = 100.0;
+  m__statistics.percent_current = 0.0;
+  m__statistics.percent_max     = 0.0;
+}
+
+ST_CACHE_STATISTICS Paint::getCacheStatistics() const
+{
+  return m__statistics;
+}
+
+void Paint::refreshFromCache()
+{
+  setUseCache(false);
+
+  m__statistics.nbr_pixels_in_cache  = 0;
+  m__statistics.nbr_pixels_out_cache = 0;
+  m__statistics.nbr_pixels_total     = 0;
+
+  for (UWORD y = 1; y < 135; y++) {
+    for (UWORD x = 1; x < 240; x++) {
+      m__statistics.nbr_pixels_total++;
+
+      if (m__cache_color[x-1][y-1] != m__cache_color_previous[x-1][y-1]) {
+        Paint_SetPixel(x, y, m__cache_color[x-1][y-1], false, true);
+
+        m__cache_color_previous[x-1][y-1] = m__cache_color[x-1][y-1];
+
+        m__statistics.nbr_pixels_out_cache++;
+      }
+      else {
+        m__statistics.nbr_pixels_in_cache++;
+      }
+    }
+  }
+
+  m__statistics.percent_current = 100.0 * ((float)m__statistics.nbr_pixels_in_cache / (float)m__statistics.nbr_pixels_total);
+
+  if (m__statistics.percent_current < m__statistics.percent_min) m__statistics.percent_min = m__statistics.percent_current;
+  if (m__statistics.percent_current > m__statistics.percent_max) m__statistics.percent_max = m__statistics.percent_current;
+
+  setUseCache(true);
 }
 
 /******************************************************************************
@@ -420,7 +492,7 @@ void Paint::Paint_SetMirroring(UBYTE mirror)
     Ypoint  :   At point Y
     Color   :   Painted colors
 ******************************************************************************/
-void Paint::Paint_SetPixel(UWORD Xpoint, UWORD Ypoint, UWORD Color, bool i__flg_screen_virtual)
+void Paint::Paint_SetPixel(UWORD Xpoint, UWORD Ypoint, UWORD Color, bool i__flg_screen_virtual, bool i__flg_force_lcd)
 {
   //Serial.printf("%s(X:[%d] Y:[%d] Color:[0x%04x])\n", __FUNCTION__ , Xpoint, Ypoint, Color);
 
@@ -440,13 +512,6 @@ void Paint::Paint_SetPixel(UWORD Xpoint, UWORD Ypoint, UWORD Color, bool i__flg_
 
     return;
   }
-
-  // Use the cache before rotation ;-)
-  if (m__cache_color[Xpoint-1][Ypoint-1] == Color) {
-    return;
-  }
-  m__cache_color[Xpoint-1][Ypoint-1] = Color;
-  // End: Use the cache before rotation ;-)
 
   UWORD X, Y;
 
@@ -489,9 +554,41 @@ void Paint::Paint_SetPixel(UWORD Xpoint, UWORD Ypoint, UWORD Color, bool i__flg_
       return;
   }
 
-  // printf("x = %d, y = %d\r\n", X, Y);
+  /* Retablissement des coordonnees dans le cas d'une rotation de 270 degres
+     => Cf. l'organisation du cache ;-)
+     => TODO: Implementer les 2 autres cas de rotation: 90 et 180 degres
+   */
+  if (m__rotate_in_progress == true) {
+#if USE_SIMULATION
+    // Rotation de 270 degres
+    Xpoint = X;
+    Ypoint = Y;
+#else
+    // Rotation de 270 degres
+    Xpoint = Y;
+    Ypoint = m__paint.WidthMemory - 1 - X;
+#endif
+  }
+
+  if (m__flg_use_cache == false) {
+    // Si le cache n'est pas utilse -> Appel a 'LCD_SetUWORD()'...
+    if (i__flg_force_lcd == false) {
+      /* Test si le pixel est deja affiche avec la meme couleur
+         => Si Oui: Pas d'appel a 'LCD_SetUWORD()'
+       */
+      if (m__cache_color[Xpoint-1][Ypoint-1] == Color) {
+        return;
+      }
+      m__cache_color[Xpoint-1][Ypoint-1] = Color;   // Maj du cache
+    }
+  }
+  else {
+    m__cache_color[Xpoint-1][Ypoint-1] = Color;     // Maj du cache
+    return;
+  }
+
   if (X >= m__paint.WidthMemory || Y >= m__paint.HeightMemory) {
-    //Debug("Exceeding display boundaries\r\n");
+    Serial.printf("error Paint::Paint_SetPixel(): %u >= %u || %u >= %u\n", X, m__paint.WidthMemory, Y, m__paint.HeightMemory);
     return;
   }
 
@@ -540,9 +637,9 @@ parameter:
     Color		:   Set color
     Dot_Pixel	:	point size
 ******************************************************************************/
-void Paint::Paint_DrawPoint( UWORD Xpoint,       UWORD Ypoint, UWORD Color,
+void Paint::Paint_DrawPoint( UWORD Xpoint, UWORD Ypoint, UWORD Color,
                       DOT_PIXEL Dot_Pixel,DOT_STYLE Dot_FillWay,
-                      bool i__flg_screen_virtual)
+                      bool i__flg_screen_virtual, UWORD Color_Background)
 {
     if (Xpoint > m__paint.Width || Ypoint > m__paint.Height) {
         //Debug("Paint_DrawPoint Input exceeds the normal display range\r\n");
@@ -556,13 +653,17 @@ void Paint::Paint_DrawPoint( UWORD Xpoint,       UWORD Ypoint, UWORD Color,
                 if(Xpoint + XDir_Num - Dot_Pixel < 0 || Ypoint + YDir_Num - Dot_Pixel < 0)
                     break;
                 // printf("x = %d, y = %d\r\n", Xpoint + XDir_Num - Dot_Pixel, Ypoint + YDir_Num - Dot_Pixel);
-                Paint_SetPixel(Xpoint + XDir_Num - Dot_Pixel, Ypoint + YDir_Num - Dot_Pixel, Color, i__flg_screen_virtual);
+                if (Color_Background != m__cache_color[Xpoint + XDir_Num - Dot_Pixel - 1][Ypoint + YDir_Num - Dot_Pixel - 1]) {
+                  Paint_SetPixel(Xpoint + XDir_Num - Dot_Pixel, Ypoint + YDir_Num - Dot_Pixel, Color, i__flg_screen_virtual);
+                }
             }
         }
     } else {
         for (XDir_Num = 0; XDir_Num <  Dot_Pixel; XDir_Num++) {
             for (YDir_Num = 0; YDir_Num <  Dot_Pixel; YDir_Num++) {
-                Paint_SetPixel(Xpoint + XDir_Num - 1, Ypoint + YDir_Num - 1, Color);
+                if (Color_Background != m__cache_color[Xpoint + XDir_Num - Dot_Pixel - 1][Ypoint + YDir_Num - Dot_Pixel - 1]) {
+                  Paint_SetPixel(Xpoint + XDir_Num - 1, Ypoint + YDir_Num - 1, Color, i__flg_screen_virtual);
+                }
             }
         }
     }
@@ -578,15 +679,19 @@ parameter:
     Color  ：The color of the line segment
 ******************************************************************************/
 void Paint::Paint_DrawLine(UWORD Xstart, UWORD Ystart, UWORD Xend, UWORD Yend, 
-                    UWORD Color, DOT_PIXEL Line_width, LINE_STYLE Line_Style,
-                    bool i__flg_screen_virtual)
+                    UWORD Color_Foreground, DOT_PIXEL Line_width, LINE_STYLE Line_Style,
+                    bool i__flg_screen_virtual, UWORD Color_Background)
 {
-    Serial.printf("Entering in 'Paint_DrawLine(%u, %u, %u, %u, %u, %u, %u)'\n",
-    	Xstart, Ystart, Xend, Yend, Color, Line_width, Line_Style);
+#if 0
+    Serial.printf("Entering in 'Paint_DrawLine(%u, %u, %u, %u, 0x%04x, %u, %u, %u, 0x%04x)\n",
+    	Xstart, Ystart, Xend, Yend, Color_Foreground, Line_width, Line_Style, i__flg_screen_virtual, Color_Background);
+#endif
 
     if (Xstart > m__paint.Width || Ystart > m__paint.Height ||
         Xend > m__paint.Width || Yend > m__paint.Height) {
         Serial.printf("Paint_DrawLine Input exceeds the normal display range\n");
+        Serial.printf("%u > %u || %u > %u\n", Xstart, m__paint.Width, Ystart, m__paint.Height);
+        Serial.printf("%u > %u || %u > %u\n", Xend, m__paint.Width, Yend, m__paint.Height);
         return;
     }
 
@@ -608,10 +713,10 @@ void Paint::Paint_DrawLine(UWORD Xstart, UWORD Ystart, UWORD Xend, UWORD Yend,
         //Painted dotted line, 2 point is really virtual
         if (Line_Style == LINE_STYLE_DOTTED && Dotted_Len % 3 == 0) {
             //Debug("LINE_DOTTED\r\n");
-            Paint_DrawPoint(Xpoint, Ypoint, IMAGE_BACKGROUND, Line_width, DOT_STYLE_DFT, i__flg_screen_virtual);
+            Paint_DrawPoint(Xpoint, Ypoint, IMAGE_BACKGROUND, Line_width, DOT_STYLE_DFT, i__flg_screen_virtual, Color_Background);
             Dotted_Len = 0;
         } else {
-            Paint_DrawPoint(Xpoint, Ypoint, Color, Line_width, DOT_STYLE_DFT, i__flg_screen_virtual);
+            Paint_DrawPoint(Xpoint, Ypoint, Color_Foreground, Line_width, DOT_STYLE_DFT, i__flg_screen_virtual, Color_Background);
         }
         if (2 * Esp >= dy) {
             if (Xpoint == Xend)
@@ -639,24 +744,32 @@ parameter:
     Filled : Whether it is filled--- 1 solid 0：empty
 ******************************************************************************/
 void Paint::Paint_DrawRectangle( UWORD Xstart, UWORD Ystart, UWORD Xend, UWORD Yend, 
-                          UWORD Color, DOT_PIXEL Line_width, DRAW_FILL Filled )
+                          UWORD Color_Foreground, DOT_PIXEL Line_width, DRAW_FILL Filled, UWORD Color_Background,
+                          bool i__flg_screen_virtual)
 {
+#if 0
+    Serial.printf("Entering in 'Paint_DrawRectangle(%u, %u, %u, %u, 0x%04x, %u, %u, 0x%04x)\n",
+    	Xstart, Ystart, Xend, Yend, Color_Foreground, Line_width, Filled, Color_Background);
+#endif
+
     if (Xstart > m__paint.Width || Ystart > m__paint.Height ||
         Xend > m__paint.Width || Yend > m__paint.Height) {
-        //Debug("Input exceeds the normal display range\r\n");
+        Serial.printf("error Paint::Paint_DrawRectangle(): Input exceeds the normal display range\n");
+        Serial.printf("error    [%d > %d || %d > %d]\n", Xstart, m__paint.Width, Ystart, m__paint.Height);
+        Serial.printf("error || [%d > %d || %d > %d]\n", Xend, m__paint.Width, Yend, m__paint.Height);
         return;
     }
 
     if (Filled ) {
         UWORD Ypoint;
         for(Ypoint = Ystart; Ypoint < Yend; Ypoint++) {
-            Paint_DrawLine(Xstart, Ypoint, Xend, Ypoint, Color ,Line_width, LINE_STYLE_SOLID);
+            Paint_DrawLine(Xstart, Ypoint, Xend, Ypoint, Color_Foreground, Line_width, LINE_STYLE_SOLID, i__flg_screen_virtual, Color_Background);
         }
     } else {
-        Paint_DrawLine(Xstart, Ystart, Xend, Ystart, Color ,Line_width, LINE_STYLE_SOLID);
-        Paint_DrawLine(Xstart, Ystart, Xstart, Yend, Color ,Line_width, LINE_STYLE_SOLID);
-        Paint_DrawLine(Xend, Yend, Xend, Ystart, Color ,Line_width, LINE_STYLE_SOLID);
-        Paint_DrawLine(Xend, Yend, Xstart, Yend, Color ,Line_width, LINE_STYLE_SOLID);
+        Paint_DrawLine(Xstart, Ystart, Xend, Ystart, Color_Foreground, Line_width, LINE_STYLE_SOLID, i__flg_screen_virtual, Color_Background);
+        Paint_DrawLine(Xstart, Ystart, Xstart, Yend, Color_Foreground, Line_width, LINE_STYLE_SOLID, i__flg_screen_virtual, Color_Background);
+        Paint_DrawLine(Xend, Yend, Xend, Ystart, Color_Foreground, Line_width, LINE_STYLE_SOLID, i__flg_screen_virtual, Color_Background);
+        Paint_DrawLine(Xend, Yend, Xstart, Yend, Color_Foreground, Line_width, LINE_STYLE_SOLID, i__flg_screen_virtual, Color_Background);
     }
 }
 
@@ -671,7 +784,7 @@ parameter:
     Filled    : Whether it is filled: 1 filling 0：Do not
 ******************************************************************************/
 void Paint::Paint_DrawCircle(  UWORD X_Center, UWORD Y_Center, UWORD Radius, 
-                        UWORD Color, DOT_PIXEL Line_width, DRAW_FILL Draw_Fill )
+                        UWORD Color, DOT_PIXEL Line_width, DRAW_FILL Draw_Fill, UWORD Color_Background)
 {
     if (X_Center > m__paint.Width || Y_Center >= m__paint.Height) {
         //Debug("Paint_DrawCircle Input exceeds the normal display range\r\n");
@@ -1095,15 +1208,81 @@ void Paint::Paint_DrawBarGraph(UWORD i__y, int i__value, int i__value_max, int i
 }
 // Fin: Code tire de 'GUI_Paint.cpp'
 
-// Decalage a gauche des pixels de l'ecran virtuel et rafraichissement de celui-ci
-void Paint::Paint_ShiftAndRefreshScreenVirtual(bool i__force_shift)
+void Paint::Paint_DrawPeriodAndUnit()
 {
-  static int g__period_for_shift = SCREEN_VIRTUAL_PERIOD_SHIFT;
+  // Preparation de l'accueil de la presentation
+  Paint_DrawSymbol(1, 64, 0, &Font16Symbols, BLACK, BLACK);
+  Paint_DrawSymbol(1, 81, 0, &Font16Symbols, BLACK, BLACK);
+  Paint_DrawSymbol(1 + Font16Symbols.Width, 64, 0, &Font16Symbols, BLACK, BLACK);
+  Paint_DrawSymbol(1 + Font16Symbols.Width, 81, 0, &Font16Symbols, BLACK, BLACK);
+  Paint_DrawSymbol(1 + 2 * Font16Symbols.Width, 64, 0, &Font16Symbols, BLACK, BLACK);
+  Paint_DrawSymbol(1 + 2 * Font16Symbols.Width, 81, 0, &Font16Symbols, BLACK, BLACK);
+
+  // Affichage en vertical de la periode
+  const char *l__text_period = g__menu_periods[g__menus->getSubMenuPeriodCurrent()][MENU_TYPE_SHORT];
+  size_t l__len_period = strlen(l__text_period);
+  uint16_t l__x_period = 39;
+  if (l__len_period == 2) {
+    l__x_period = (l__x_period + Font16.Height / 2 - 4);
+  } 
+
+#if USE_SIMULATION
+  g__gestion_lcd->setRotateInProgress(true);
+  g__gestion_lcd->Paint_NewImage(LCD_HEIGHT, LCD_WIDTH, 270, WHITE);
+  g__gestion_lcd->Paint_DrawString_EN(l__x_period, 4, l__text_period, &Font16, BLACK, WHITE);
+  g__gestion_lcd->Paint_NewImage(LCD_HEIGHT, LCD_WIDTH, 0, WHITE);
+  g__gestion_lcd->setRotateInProgress(false);
+#else
+  g__gestion_lcd->setRotateInProgress(true);
+  g__gestion_lcd->Paint_NewImage(LCD_WIDTH, LCD_HEIGHT, 0, WHITE);
+  g__gestion_lcd->Paint_DrawString_EN(l__x_period, 4, l__text_period, &Font16, BLACK, WHITE);
+  g__gestion_lcd->Paint_NewImage(LCD_WIDTH, LCD_HEIGHT, 90, WHITE);
+  g__gestion_lcd->setRotateInProgress(false);
+#endif
+
+  // Affichage en vertical de l'unite'
+  const char *l__text_unit = g__menu_units[g__menus->getSubMenuUnitCurrent()][MENU_TYPE_SHORT];
+  size_t l__len_unit = strlen(l__text_unit);
+  uint16_t l__x_unit = 39;
+  if (l__len_unit == 1) {
+    l__x_unit = (l__x_unit + Font16.Height / 2 + 2);
+  } 
+  else if (l__len_unit == 2) {
+    l__x_unit = (l__x_unit + Font16.Height / 2 - 4);
+  }
+
+#if USE_SIMULATION
+  g__gestion_lcd->setRotateInProgress(true);
+  g__gestion_lcd->Paint_NewImage(LCD_HEIGHT, LCD_WIDTH, 270, WHITE);
+  g__gestion_lcd->Paint_DrawString_EN(l__x_unit, 7 + Font16.Width, l__text_unit, &Font16, BLACK, WHITE);
+  g__gestion_lcd->Paint_NewImage(LCD_HEIGHT, LCD_WIDTH, 0, WHITE);
+  g__gestion_lcd->setRotateInProgress(false);
+#else
+  g__gestion_lcd->setRotateInProgress(true);
+  g__gestion_lcd->Paint_NewImage(LCD_WIDTH, LCD_HEIGHT, 0, WHITE);
+  g__gestion_lcd->Paint_DrawString_EN(l__x_unit, 7 + Font16.Width, l__text_unit, &Font16, BLACK, WHITE);
+  g__gestion_lcd->Paint_NewImage(LCD_WIDTH, LCD_HEIGHT, 90, WHITE);
+  g__gestion_lcd->setRotateInProgress(false);
+#endif
+}
+
+// Decalage a gauche des pixels de l'ecran virtuel et rafraichissement de celui-ci
+void Paint::Paint_ShiftAndRefreshScreenVirtual(bool i__force_shift, bool i__flg_partial)
+{
+  static int g__period_for_shift = (SCREEN_VIRTUAL_PERIOD / SCREEN_VIRTUAL_SCALE_PIXELS);
 
   if (i__force_shift == true || g__period_for_shift == 0) {
     for (UWORD x = 1; x < (SCREEN_VIRTUAL_BOTTOM_X - SCREEN_VIRTUAL_TOP_X); x++) {
-      for (UWORD y = 0; y < (SCREEN_VIRTUAL_BOTTOM_Y - SCREEN_VIRTUAL_TOP_Y); y++) {
-        m__screen_virtual[x-1][y] = m__screen_virtual[x][y];
+
+      if (i__flg_partial == true) {
+        for (UWORD y = 0; y < (SCREEN_VIRTUAL_BOTTOM_Y_PARTIAL - SCREEN_VIRTUAL_TOP_Y); y++) {
+          m__screen_virtual[x-1][y] = m__screen_virtual[x][y];
+        }
+      }
+      else {
+        for (UWORD y = 0; y < (SCREEN_VIRTUAL_BOTTOM_Y - SCREEN_VIRTUAL_TOP_Y); y++) {
+          m__screen_virtual[x-1][y] = m__screen_virtual[x][y];
+        }
       }
     }
 
@@ -1115,21 +1294,31 @@ void Paint::Paint_ShiftAndRefreshScreenVirtual(bool i__force_shift)
 
     // Refresh the screen virtual to LCD 
     for (UWORD x = 0; x < (SCREEN_VIRTUAL_BOTTOM_X - SCREEN_VIRTUAL_TOP_X) && x < LCD_HEIGHT; x++) {
-      for (UWORD y = 0; y < (SCREEN_VIRTUAL_BOTTOM_Y - SCREEN_VIRTUAL_TOP_Y) && y < LCD_WIDTH; y++) {
-        Paint_SetPixel(min(x + SCREEN_VIRTUAL_TOP_X, LCD_HEIGHT), min(y + SCREEN_VIRTUAL_TOP_Y, LCD_WIDTH), m__screen_virtual[x][y]);
+      if (i__flg_partial == true) {
+        for (UWORD y = 0; y < (SCREEN_VIRTUAL_BOTTOM_Y_PARTIAL - SCREEN_VIRTUAL_TOP_Y); y++) {
+          Paint_SetPixel(min(x + SCREEN_VIRTUAL_TOP_X, LCD_HEIGHT), min(y + SCREEN_VIRTUAL_TOP_Y, LCD_WIDTH), m__screen_virtual[x][y]);
+        }
+      }
+      else {
+        for (UWORD y = 0; y < (SCREEN_VIRTUAL_BOTTOM_Y - SCREEN_VIRTUAL_TOP_Y); y++) {
+          Paint_SetPixel(min(x + SCREEN_VIRTUAL_TOP_X, LCD_HEIGHT), min(y + SCREEN_VIRTUAL_TOP_Y, LCD_WIDTH), m__screen_virtual[x][y]);
+        }
       }
     }
 
-    g__period_for_shift = SCREEN_VIRTUAL_PERIOD_SHIFT;
+    g__period_for_shift = (SCREEN_VIRTUAL_PERIOD / SCREEN_VIRTUAL_SCALE_PIXELS);
   }
   else {
     g__period_for_shift--;
   }
+
+  // Affichage de la periode et de l'unite
+  Paint_DrawPeriodAndUnit();
 }
 
 void Paint::Paint_ClearScreenVirtual()
 {
-  //Serial.printf("Paint::Paint_ClearScreenVirtual\n");
+  Serial.printf("Paint::Paint_ClearScreenVirtual\n");
 
   for (UWORD y = 0; y < (SCREEN_VIRTUAL_BOTTOM_Y - SCREEN_VIRTUAL_TOP_Y); y++) {
     for (UWORD x = 0; x < (SCREEN_VIRTUAL_BOTTOM_X - SCREEN_VIRTUAL_TOP_X); x++) {
@@ -1181,6 +1370,9 @@ void Paint::Paint_UpdateLcdFromScreenVirtual(bool i__force_updating)
     if (l__enum_period == ENUM_MI_PERIOD_DONE) {
       Paint_DrawLine(231, 65, 231, 98, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID, true);
 
+      // Affichage du bargraph de progression des heures @ 24H dans l'ecran virtuel
+      Paint_UpdateBargraph24H();
+
       Paint_ShiftAndRefreshScreenVirtual(true);
     }
     else {
@@ -1192,14 +1384,14 @@ void Paint::Paint_UpdateLcdFromScreenVirtual(bool i__force_updating)
 
     // Horodatage de l'echelle
     char l__text[32];
-    sprintf(l__text, "   %02uH%02u",
+    sprintf(l__text, "  %02uH%02u",   // Warning: 2 blancs avant "HHhMM"
       (unsigned int)(g__date_time->getRtcSecInDayLocal() / 3600L),
       (unsigned int)((g__date_time->getRtcSecInDayLocal() % 3600L) / 60L));
 
     Serial.printf("Paint::Paint_UpdateLcdFromScreenVirtual(%d): [%s]\n", i__force_updating, l__text);
 
-    // Effacement eventuel des 3 precedents caracteres ;-)
-    Paint_DrawString_EN(217 - 3 * (Font8.Width), 101, l__text, &Font8, BLACK, WHITE, true);
+    // Effacement eventuel des 2 precedents caracteres (cas d'une periode de 1' sans effacement ;-)
+    Paint_DrawString_EN(211 - 2 * (Font12.Width), 101, l__text, &Font12, BLACK, WHITE, true);
 
     /* Calcul des nouvelles valeurs des courbes avant presentation
        => Pas de remise a zero des nombres d'echantillons car dans la periode
@@ -1217,7 +1409,7 @@ void Paint::Paint_UpdateLcdFromScreenVirtual(bool i__force_updating)
     Paint_Presentation_ValueInCurves("Avg",     l__analog_values_curves.nbr_samples, l__analog_values_curves.analogVolts_avg.value, &l__analog_values_curves.analogVolts_avg.position, GREEN);
     Paint_Presentation_ValueInCurves("Current", l__analog_values_curves.nbr_samples, l__analog_values_curves.analogVolts.value,     &l__analog_values_curves.analogVolts.position,     YELLOW);
 
-    // Barre verticale de l'echelle
+    // Barre verticale de l'echelle (demi-periode et periode)
     if (i__force_updating == false) {
 #if USE_PAINT_LINE
       Paint_DrawLine(231, 65, 231, 98, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID, true);
@@ -1228,13 +1420,16 @@ void Paint::Paint_UpdateLcdFromScreenVirtual(bool i__force_updating)
     }
     else {
 #if USE_PAINT_LINE
-      Paint_DrawLine(231, 65, 231, 98, YELLOW, DOT_PIXEL_1X1, LINE_STYLE_SOLID, true);
+      // Marquage de la reinitialisation de la periode en YELLOW
+      g__gestion_lcd->Paint_DrawLine(231, 65, 231, 81, YELLOW, DOT_PIXEL_1X1, LINE_STYLE_SOLID, true);
+      g__gestion_lcd->Paint_DrawLine(231, 83, 231, 98, YELLOW, DOT_PIXEL_1X1, LINE_STYLE_SOLID, true);
 #else
       Paint_DrawSymbol(230, 65, 1, &Font16Symbols, BLACK, YELLOW, true);
       Paint_DrawSymbol(230, 65 + 16 + 1, 1, &Font16Symbols, BLACK, YELLOW, true);
 #endif
     }
 
+    // Decalage et raffraichissement de l'ecran virtuel
     Paint_ShiftAndRefreshScreenVirtual(true);
   }
 }
@@ -1270,12 +1465,107 @@ void Paint::Paint_Presentation_ValueInCurves(const char *i__label, unsigned int 
   *io__position = l__position;
 }
 
-GestionLCD::GestionLCD()
+#if USE_SET_SCREEN_VIRTUAL
+void Paint::Paint_SetScreenVirtual(UWORD i__x_from, UWORD i__y_from, UWORD i__x_to, UWORD i__y_to, UWORD Color_Background, UWORD Color_Foreground)
 {
-	Serial.printf("GestionLCD::GestionLCD()\n");
+  for (UWORD x = i__x_from; x < i__x_to; x++) {
+    for (UWORD y = i__y_from; y < i__y_to; y++) {
+      if (Color_Background == TRANSPARENCY && m__screen_virtual[x-1][y-1] == BLACK) {
+        m__screen_virtual[x-1][y-1] = Color_Foreground;
+      }
+      else if (m__screen_virtual[x-1][y-1] != TRANSPARENCY_2) {
+        m__screen_virtual[x-1][y-1] = Color_Foreground;
+      }
+    }
+  }
+}
+#endif
+
+/* Bargraph des 24 heures
+  => 0%   -> Xmax = 1
+  => 100% -> Xmax = 238
+*/
+void Paint::Paint_UpdateBargraph24H()
+{
+  //Serial.printf("%s(): Entering...\n", __FUNCTION__);
+
+    float l__mark_percent = 100.0 * (g__date_time->getRtcSecInDayLocal() / 86400.0);
+
+#if USE_SET_SCREEN_VIRTUAL
+    int   l__mark_pos     = max((238 - min((int)((238.0 * l__mark_percent) / 100.0), 238)), 1);
+#else
+    int   l__mark_pos     = max((239 - min((int)((239.0 * l__mark_percent) / 100.0), 238)), 1);
+#endif
+
+#if 0
+    Serial.printf("Bargrap 24H: Epoch [%lu] Sec. l__mark_percent [%.1f%%] -> Pos [%d] [%d -> %d]\n",
+      g__date_time->getRtcSecInDayLocal(), l__mark_percent, l__mark_pos,
+      max(1, (l__mark_pos - 1)), min(238, (l__mark_pos + 1)));
+#endif
+
+#if USE_SET_SCREEN_VIRTUAL
+    g__gestion_lcd->Paint_SetScreenVirtual(1, 136, (l__mark_pos - 1), 148, TRANSPARENCY, DARKGRAY);
+    //g__gestion_lcd->Paint_SetScreenVirtual(min(238, l__mark_pos - 5), 136, max(1, (l__mark_pos - 5)), 148, TRANSPARENCY, YELLOW);
+    g__gestion_lcd->Paint_SetScreenVirtual((l__mark_pos + 1), 136, 238, 148, TRANSPARENCY, DARKBLUE);
+#else
+    // Affichage du seul curseur de la progression de l'heure @ 24H 
+    g__gestion_lcd->Paint_DrawRectangle(2, 100, max(2, (l__mark_pos - 1)), 112, DARKBLUE, DOT_PIXEL_1X1, DRAW_FILL_FULL, WHITE);
+    //g__gestion_lcd->Paint_DrawRectangle(max(2, (l__mark_pos - 5)), 100, min(239, (l__mark_pos + 5)), 112, GRAY, DOT_PIXEL_1X1, DRAW_FILL_FULL, WHITE);
+    g__gestion_lcd->Paint_DrawRectangle(min(239, (l__mark_pos + 1)), 100, 240, 112, DARKGRAY, DOT_PIXEL_1X1, DRAW_FILL_FULL, WHITE);
+#endif
+}
+
+/* Warning: L'initialisation des 2 attributs 'm__screen_virtual_period' et 'm__sub_menu_period' doivent etre coherent ;-)
+ */
+GestionLCD::GestionLCD() : m__screen_virtual_period(SCREEN_VIRTUAL_PERIOD_5_MIN),
+                           m__sub_menu_period(SUB_MENU_PERIOD_5_MINUTES), m__sub_menu_unit(SUB_MENU_UNIT_MILLIS_VOLTS)                      
+{
+  Serial.printf("GestionLCD::GestionLCD() m__sub_menu_period [%d] m__sub_menu_unit [%d]\n", m__sub_menu_period, m__sub_menu_unit);
 }
 
 GestionLCD::~GestionLCD()
 {
 	Serial.printf("GestionLCD::~GestionLCD()\n");
+}
+
+void GestionLCD::setScreenVirtualPeriod(ENUM_SUB_MENU_PERIOD i__value)
+{
+  Serial.printf("%s(%d)\n", __FUNCTION__, i__value);
+
+  switch (i__value) {
+  case SUB_MENU_PERIOD_1_MINUTE:
+    m__screen_virtual_period = SCREEN_VIRTUAL_PERIOD_1_MIN;
+    break;
+  case SUB_MENU_PERIOD_5_MINUTES:
+    m__screen_virtual_period = SCREEN_VIRTUAL_PERIOD_5_MIN;
+    break;
+  case SUB_MENU_PERIOD_15_MINUTES:
+    m__screen_virtual_period = SCREEN_VIRTUAL_PERIOD_15_MIN;
+    break;
+  case SUB_MENU_PERIOD_30_MINUTES:
+    m__screen_virtual_period = SCREEN_VIRTUAL_PERIOD_30_MIN;
+    break;
+  case SUB_MENU_PERIOD_1_HOUR:
+    m__screen_virtual_period = SCREEN_VIRTUAL_PERIOD_1_HOUR;
+    break;
+  case SUB_MENU_PERIOD_3_HOURS:
+    m__screen_virtual_period = SCREEN_VIRTUAL_PERIOD_3_HOURS;
+    break;
+  case SUB_MENU_PERIOD_6_HOURS:
+    m__screen_virtual_period = SCREEN_VIRTUAL_PERIOD_6_HOURS;
+    break;
+  default:
+    m__screen_virtual_period = SCREEN_VIRTUAL_PERIOD_1_MIN;
+    break;
+  }
+
+  // Pour la presentation lors du deroulement de l'acquisition (cf. 'callback_menu_scrolling()' de la classe 'Menus')
+  m__sub_menu_period = i__value;
+
+  // Marquage de la reinitialisation de la periode en GREEN
+  Paint_DrawLine(231, 65, 231, 81, GREEN, DOT_PIXEL_1X1, LINE_STYLE_SOLID, true);
+  Paint_DrawLine(231, 83, 231, 98, GREEN, DOT_PIXEL_1X1, LINE_STYLE_SOLID, true);
+
+  // Decalage et raffraichissement de l'ecran virtuel
+  Paint_ShiftAndRefreshScreenVirtual(true, true);
 }

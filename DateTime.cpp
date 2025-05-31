@@ -1,4 +1,4 @@
-// $Id: DateTime.cpp,v 1.5 2025/05/05 16:31:25 administrateur Exp $
+// $Id: DateTime.cpp,v 1.6 2025/05/25 12:52:37 administrateur Exp $
 
 #if USE_SIMULATION
 #include <cstdio>
@@ -13,6 +13,7 @@
 #endif
 
 #include "Misc.h"
+#include "Menus.h"
 #include "GestionLCD.h"
 #include "DateTime.h"
 

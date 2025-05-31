@@ -1,4 +1,4 @@
-// $Id: AnalogRead.h,v 1.9 2025/05/04 13:16:17 administrateur Exp $
+// $Id: AnalogRead.h,v 1.12 2025/05/31 15:51:56 administrateur Exp $
 
 #ifndef __ANALOG_READ__
 #define __ANALOG_READ__
@@ -8,6 +8,8 @@
 
 #define ANALOG_RESOLUTION     12        // 12 bits (0-4095)
 #define ANALOG_VALUE_MAX      3300      // 3.3 Volts
+
+#define RATIO_MILLI_VOLTS_TO_WATTS    1.5
 
 typedef enum {
   ANALOG_MIN = 0,
@@ -39,6 +41,11 @@ typedef struct {
     ST_ANALOG_VALUE_CURVE_AVG   analogVolts_max;
 } ST_ANALOG_VALUES_CURVES;
 
+typedef enum {
+  UNIT_MILLI_VOLTS = 0,
+  UNIT_WATTS
+} ENUM_TYPE_UNIT;
+
 #if USE_SIMULATION
 #include "AnalogReadSimu.h"
 
@@ -60,9 +67,13 @@ class AnalogRead
 
     float m__analogVoltsValue_avg_float;
 
+    ENUM_TYPE_UNIT            m__type_unit;
+
 	public:
 		AnalogRead(int i__pin_adc_channel);
 		~AnalogRead();
+
+    void resetMinMaxValues();
 
     int getResolution() const { return m__analogResolution; };
     int getValueMax() const { return m__valueMax; };
@@ -78,7 +89,10 @@ class AnalogRead
     void formatValueCurrent(ENUM_ANALOG_VALUES i__type_value, char *o__buffer);
 
     void calculOfValuesCurves(bool i__flg_raz_samples);
-    void getValuesCurves(ST_ANALOG_VALUES_CURVES *o__analog_values_curves); 
+    void getValuesCurves(ST_ANALOG_VALUES_CURVES *o__analog_values_curves);
+
+    ENUM_TYPE_UNIT getTypeUnit() const { return m__type_unit; };
+    void           setTypeUnit(ENUM_TYPE_UNIT i__value) { m__type_unit = i__value; };
 };
 
 extern AnalogRead		*g__analog_read_1;

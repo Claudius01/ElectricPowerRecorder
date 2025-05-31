@@ -1,4 +1,4 @@
-// $Id: ConfigRTC.h,v 1.2 2025/04/04 17:08:27 administrateur Exp $
+// $Id: ConfigRTC.h,v 1.4 2025/05/24 13:16:58 administrateur Exp $
 
 #ifndef __CONFIG_RTC__
 #define __CONFIG_RTC__
@@ -21,7 +21,6 @@ class ConfigRTC {
     bool              m__flg_presentation;
 
     const char *getDayInWeek() const;
-    void nextState();
     void presentation();
 
 	public:
@@ -32,8 +31,11 @@ class ConfigRTC {
     bool isInProgress() const;
     bool isDone() const { return m__config_rtc == CONFIG_RTC_DONE; };
     void setDone();
+    void nextState();
     void nextValue();
 };
 
 extern ConfigRTC		*g__config_rtc;
+
+extern uint16_t     g__chenillard;
 #endif

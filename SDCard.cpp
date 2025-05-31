@@ -1,4 +1,4 @@
-// $Id: SDCard.cpp,v 1.2 2025/04/25 09:19:36 administrateur Exp $
+// $Id: SDCard.cpp,v 1.4 2025/05/25 12:52:37 administrateur Exp $
 
 #if USE_SIMULATION
 #include "ArduinoTypes.h"
@@ -14,6 +14,7 @@
 #include "Misc.h"
 #include "Timers.h"
 #include "DateTime.h"
+#include "Menus.h"
 #include "GestionLCD.h"
 #include "SDCard.h"
 
@@ -56,7 +57,7 @@ void SDCard::startActivity()
 #endif
 
   g__state_leds |= STATE_LED_YELLOW;
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_YELLOW_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, YELLOW);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_YELLOW, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, YELLOW);
 }
 
 /* 1 - Armement timer 'TIMER_SDCARD_ACCES' en fin d'activite
@@ -71,7 +72,7 @@ void SDCard::stopActivity(boolean i__flg_no_error)
   if (i__flg_no_error == false) {
     g__state_leds |= STATE_LED_RED;
     g__timers->start(TIMER_SDCARD_ERROR, DURATION_TIMER_SDCARD_ERROR, &callback_end_sdcard_error);
-    g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_RED_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, RED);
+    g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_RED, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, RED);
   }
 
   flg_sdcard_in_use = false;
@@ -97,7 +98,7 @@ bool SDCard::init()
     Serial.printf("error SDCard::init(): SD Card mount failed\n");
 
     g__state_leds |= STATE_LED_RED;
-    g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_RED_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, RED);
+    g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_RED, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, RED);
 
     g__timers->start(TIMER_SDCARD_ACCES, DURATION_TIMER_SDCARD_ACCES, &callback_end_sdcard_acces);
   }
@@ -105,7 +106,7 @@ bool SDCard::init()
     flg_init = true;
     l__flg_rtn = true;
 
-    g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_GREEN_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, GREEN);
+    g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_GREEN, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, GREEN);
 
     stopActivity(l__flg_rtn);
   }

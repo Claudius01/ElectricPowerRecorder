@@ -1,4 +1,4 @@
-// $Id: ConfigRTC.cpp,v 1.6 2025/05/04 12:12:16 administrateur Exp $
+// $Id: ConfigRTC.cpp,v 1.12 2025/05/25 12:52:37 administrateur Exp $
 
 #if USE_SIMULATION
 #include "ArduinoTypes.h"
@@ -11,6 +11,7 @@
 #include "Misc.h"
 
 #include "Timers.h"
+#include "Menus.h"
 #include "GestionLCD.h"
 #include "DateTime.h"
 #include "ConfigRTC.h"
@@ -26,6 +27,8 @@ void callback_end_config_rtc_scrolling()
 void callback_end_wait_acq()
 {
   g__config_rtc->setDone();     // Fin de l'acquisition => Set RTC wih the values acquired
+
+  g__menus->exit();
 }
 
 ConfigRTC::ConfigRTC() : m__config_rtc(CONFIG_RTC_NONE), m__flg_presentation(true)
@@ -74,10 +77,10 @@ void ConfigRTC::presentation()
   char l__text_for_lcd[32];
   memset(l__text_for_lcd, '\0', sizeof(l__text_for_lcd));
 
-  // Arret eventuel du timer 'TIMER_CONFIG_RTC_SCOLLING' avant la presentation
+  // Arret eventuel du timer 'TIMER_MENU_SCROLLING' avant la presentation
   if (m__config_rtc != CONFIG_RTC_WAIT_OF_ACQ) {
-    if (g__timers->isInUse(TIMER_CONFIG_RTC_SCOLLING)) {
-      g__timers->stop(TIMER_CONFIG_RTC_SCOLLING);
+    if (g__timers->isInUse(TIMER_MENU_SCROLLING)) {
+      g__timers->stop(TIMER_MENU_SCROLLING);
     }
   }
 
@@ -114,9 +117,9 @@ void ConfigRTC::presentation()
     g__gestion_lcd->Paint_DrawString_EN(6 + (11 * 19), 8, l__text_for_lcd, &Font16, BLACK, MAGENTA);
   }
 
-  // Lancement eventuel du timer 'TIMER_CONFIG_RTC_SCOLLING' apres la presentation
+  // Lancement eventuel du timer 'TIMER_MENU_SCROLLING' apres la presentation
   if (m__config_rtc != CONFIG_RTC_WAIT_OF_ACQ) {
-    g__timers->start(TIMER_CONFIG_RTC_SCOLLING, DURATION_TIMER_CONFIG_RTC_SCOLLING, &callback_end_config_rtc_scrolling);
+    g__timers->start(TIMER_MENU_SCROLLING, DURATION_TIMER_MENU_SCROLLING, &callback_end_config_rtc_scrolling);
   }
 }
 
@@ -183,13 +186,13 @@ void ConfigRTC::nextState()
     m__config_rtc = CONFIG_RTC_WAIT_OF_ACQ;
 
     // Fin de l'acquisition si pas d'appui bouton a l'expiration de 'TIMER_CONFIG_RTC_WAIT_ACQ'
-    g__timers->start(TIMER_CONFIG_RTC_WAIT_ACQ, DURATION_TIMER_CONFIG_RTC_WAIT_ACQ, &callback_end_wait_acq);
+    g__timers->start(TIMER_MENU_WAIT_ACQ, DURATION_TIMER_MENU_WAIT_ACQ, &callback_end_wait_acq);
     break;
   case CONFIG_RTC_WAIT_OF_ACQ:
     m__config_rtc = CONFIG_RTC_IN_PROGRESS_YEAR;
 
-    // Retour au debut de l'acquisition si appui bouton durant 'DURATION_TIMER_CONFIG_RTC_WAIT_ACQ'
-    g__timers->stop(TIMER_CONFIG_RTC_WAIT_ACQ);
+    // Retour au debut de l'acquisition si appui bouton durant 'DURATION_TIMER_MENU_WAIT_ACQ'
+    g__timers->stop(TIMER_MENU_WAIT_ACQ);
     break;
   default:
     break;
@@ -211,6 +214,9 @@ void ConfigRTC::setDone()
 
   g__rtc->setTimeStruct(m__timeinfo_in_acquisition);
   g__date_time->setRtcInit();
+
+  // Changement de la symbologie Led GREEN...
+  g__chenillard = 0x7F7F;
 }
 
 void ConfigRTC::click_button()
@@ -219,9 +225,9 @@ void ConfigRTC::click_button()
   nextState();
 
   if (m__config_rtc != CONFIG_RTC_WAIT_OF_ACQ) {
-    if (g__timers->isInUse(TIMER_CONFIG_RTC_SCOLLING)) {
-      g__timers->stop(TIMER_CONFIG_RTC_SCOLLING);
+    if (g__timers->isInUse(TIMER_MENU_SCROLLING)) {
+      g__timers->stop(TIMER_MENU_SCROLLING);
     }
-   g__timers->start(TIMER_CONFIG_RTC_SCOLLING, DURATION_TIMER_CONFIG_RTC_SCOLLING, &callback_end_config_rtc_scrolling);
+   g__timers->start(TIMER_MENU_SCROLLING, DURATION_TIMER_MENU_SCROLLING, &callback_end_config_rtc_scrolling);
   }
 }
