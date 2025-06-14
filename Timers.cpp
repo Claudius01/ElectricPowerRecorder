@@ -1,4 +1,4 @@
-// $Id: Timers.cpp,v 1.7 2025/05/25 09:55:12 administrateur Exp $
+// $Id: Timers.cpp,v 1.9 2025/06/02 13:16:01 administrateur Exp $
 
 /* Evolutions:
    - 2025/02/21: Utilisation de 'Serial.printf()'
@@ -41,6 +41,9 @@ static ST_TIMERS        g__st_timers[] =
 
   { TIMER_MENU_SCROLLING,      false, "Menu Scrolling" },
   { TIMER_MENU_WAIT_ACQ,       false, "Menu Wait Acq" },
+
+  { TIMER_CONSO_FLASH,         false, "Conso. flash" },
+  { TIMER_CONSO_PERIOD,        false, "Conso. period" },
 
 #if USE_SIMULATION
   { TIMER_WATCHDOG,            false, "Watchdog" },

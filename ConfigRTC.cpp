@@ -1,4 +1,4 @@
-// $Id: ConfigRTC.cpp,v 1.12 2025/05/25 12:52:37 administrateur Exp $
+// $Id: ConfigRTC.cpp,v 1.14 2025/06/02 17:32:37 administrateur Exp $
 
 #if USE_SIMULATION
 #include "ArduinoTypes.h"
@@ -15,6 +15,7 @@
 #include "GestionLCD.h"
 #include "DateTime.h"
 #include "ConfigRTC.h"
+#include "AnalogRead.h"
 
 static const char *g__days_in_week[7] = { "Jeu.", "Ven.", "Sam.", "Dim.", "Lun.", "Mar.", "Mer." };
 static const int   g__nbr_days_in_month[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
@@ -27,6 +28,9 @@ void callback_end_config_rtc_scrolling()
 void callback_end_wait_acq()
 {
   g__config_rtc->setDone();     // Fin de l'acquisition => Set RTC wih the values acquired
+
+  // Raz des consommations pour la bonne repartition heures creuses et pleines
+  g__analog_read_1->initConsommations(); 
 
   g__menus->exit();
 }
@@ -203,6 +207,8 @@ void ConfigRTC::nextState()
 
 void ConfigRTC::setDone()
 {
+  Serial.printf("%s(): Entering...\n", __FUNCTION__);
+
   char l__text_for_lcd[32];
   memset(l__text_for_lcd, '\0', sizeof(l__text_for_lcd));
 

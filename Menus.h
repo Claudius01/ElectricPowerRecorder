@@ -1,4 +1,4 @@
-// $Id: Menus.h,v 1.12 2025/05/31 13:47:57 administrateur Exp $
+// $Id: Menus.h,v 1.14 2025/06/13 15:32:46 administrateur Exp $
 
 #ifndef __MENUS__
 #define __MENUS__
@@ -60,6 +60,7 @@ typedef enum {
   SUB_MENU_UNIT_NONE = -1,
   SUB_MENU_UNIT_MILLIS_VOLTS,
   SUB_MENU_UNIT_WATTS,
+  SUB_MENU_UNIT_WATTS_HOUR,
   SUB_MENU_UNIT_EXIT,
   SUB_MENU_UNIT_NBR
 } ENUM_SUB_MENU_UNIT;
@@ -109,6 +110,7 @@ class Menus {
     void                 setSubMenuUnitCurrent(ENUM_SUB_MENU_UNIT i__value) { m__sub_menu_unit_current = i__value; };
 
     void click_button();
+
     void exit();
 };
 

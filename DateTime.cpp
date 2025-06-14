@@ -1,4 +1,4 @@
-// $Id: DateTime.cpp,v 1.6 2025/05/25 12:52:37 administrateur Exp $
+// $Id: DateTime.cpp,v 1.9 2025/06/02 17:32:37 administrateur Exp $
 
 #if USE_SIMULATION
 #include <cstdio>
@@ -15,6 +15,7 @@
 #include "Misc.h"
 #include "Menus.h"
 #include "GestionLCD.h"
+#include "AnalogRead.h"
 #include "DateTime.h"
 
 static byte                 g__monthDays[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
@@ -43,7 +44,7 @@ static ST_FOR_SOMMER_TIME_CHANGE   g__st_for_sommer_time_change = {
 };
 
 DateTime::DateTime() : flg_rtc_init(false), epoch_start(0L),epoch(0), epoch_diff(0L), duration_deconnexion(0L),
-                       epoch_rtc_gmt(0L), epoch_rtc_offset(0)
+                       epoch_rtc_gmt(0L), epoch_rtc_offset(0), duration_in_use(0L)
 {
 	Serial.println("DateTime::DateTime()");
 }
@@ -566,7 +567,17 @@ ENUM_IN_THE_PERIOD DateTime::isRtcSecInDayInRange() const
     Serial.printf("-> Next mi period range [%u..%u] Sec\n",
       l__screen_virtual_mi_period_begin, l__screen_virtual_mi_period_end);
 
-      l__period_rtn = ENUM_PERIOD_DONE;
+    /* Raz des valeurs min, max + des echantillons sans marquage sur le lcd
+       au debut d'une nouvelle periode
+    */
+    g__analog_read_1->resetMinMaxValues(false);
+
+    if (l__screen_virtual_period_begin == 0) {
+      // Reinitialisation des consommations au debut d'une nouvelle journee
+      g__analog_read_1->initConsommations();
+    }
+
+    l__period_rtn = ENUM_PERIOD_DONE;
     }
   }
   else {

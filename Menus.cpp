@@ -1,4 +1,4 @@
-// $Id: Menus.cpp,v 1.21 2025/05/31 15:51:56 administrateur Exp $
+// $Id: Menus.cpp,v 1.24 2025/06/13 15:32:46 administrateur Exp $
 
 #if USE_SIMULATION
 #include "ArduinoTypes.h"
@@ -58,6 +58,7 @@ const char *g__menu_periods[SUB_MENU_PERIOD_NBR][MENU_TYPE_NBR] = {
 const char *g__menu_units[SUB_MENU_UNIT_NBR][MENU_TYPE_NBR] = {
   { "mV     ", "mV" },    // SUB_MENU_UNIT_MILLIS_VOLTS
   { "Watts  ", "W"  },    // SUB_MENU_UNIT_WATTS
+  { "W Hour ", "Wh"  },   // SUB_MENU_UNIT_WATTS_HOUR
   { " Exit  ", "??" }     // SUB_MENU_UNIT_EXIT (non acces a 'g__menu_units[SUB_MENU_UNIT_EXIT][SUB_MENU_PERIOD_EXIT]')
 };
 // Fin: Libelles pour l'ecran LCD
@@ -118,13 +119,28 @@ void callback_menu_end_wait_acq()
 {
   switch (g__menus->getMenuInProgress()) {
   case MENU_SDCARD_IN_PROGRESS:
+    if (g__sdcard->getInhAppendGpsFrame() == false) {
+      /* Le flag 'flg_inh_append_gps_frame' sera maj a 'true'
+         => Arret des enregistrements...
+      */
+      g__sdcard->appendGpsFrame("#Stop Recording\n");
+    }
+
     // Bascule "Autorisation/Inhibition" concatenation infos dans la SDCard
     g__sdcard->setInhAppendGpsFrame(g__sdcard->getInhAppendGpsFrame() ? false : true);
+
+    if (g__sdcard->getInhAppendGpsFrame() == false) {
+      /* Le flag 'flg_inh_append_gps_frame' est maj a 'false'
+         => Reprise des enregistrements...
+      */
+      g__sdcard->appendGpsFrame("#Restart Recording\n");
+    }
+
     g__menus->exit();
     break;
 
   case MENU_VALUES_MIN_MAX_IN_PROGRESS:
-    g__analog_read_1->resetMinMaxValues();
+    g__analog_read_1->resetMinMaxValues();    // Raz des valeurs min, max + des echantillons
     g__menus->exit();
     break;
 
@@ -134,7 +150,7 @@ void callback_menu_end_wait_acq()
 
     // Reinitialisation des Min/Max si nouvelle periode
     if (g__menus->getSubMenuPeriod() != g__menus->getSubMenuPeriodCurrent()) {
-      g__analog_read_1->resetMinMaxValues();
+      g__analog_read_1->resetMinMaxValues();  // Raz des valeurs min, max + des echantillons
     }
 
     // Prise en compte de la periode
@@ -158,9 +174,21 @@ void callback_menu_end_wait_acq()
     switch (g__menus->getSubMenuUnitCurrent()) {
     case SUB_MENU_UNIT_MILLIS_VOLTS:
       g__analog_read_1->setTypeUnit(UNIT_MILLI_VOLTS);
+
+      // Preparation zone d'affichage...
+      g__gestion_lcd->Paint_DrawString_EN(2, 29, "XXXX XXXX XXXX XXXX", &Font16, BLACK, BLACK);
       break;
     case SUB_MENU_UNIT_WATTS:
       g__analog_read_1->setTypeUnit(UNIT_WATTS);
+
+      // Preparation zone d'affichage...
+      g__gestion_lcd->Paint_DrawString_EN(2, 29, "XXXX XXXX XXXX XXXX", &Font16, BLACK, BLACK);
+      break;
+    case SUB_MENU_UNIT_WATTS_HOUR:
+      g__analog_read_1->setTypeUnit(UNIT_WATTS_HOUR);
+
+      // Preparation zone d'affichage...
+      g__gestion_lcd->Paint_DrawString_EN(2, 29, "XXXXX XXXXX XXXXX  ", &Font16, BLACK, BLACK);
       break;
     default:
       Serial.printf("error Menus::callback_menu_end_wait_acq(): Unknow unit type [%d]\n", g__menus->getSubMenuUnitCurrent());

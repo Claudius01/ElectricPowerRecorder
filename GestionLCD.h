@@ -1,4 +1,4 @@
-// $Id: GestionLCD.h,v 1.42 2025/05/31 13:47:57 administrateur Exp $
+// $Id: GestionLCD.h,v 1.43 2025/06/04 14:56:10 administrateur Exp $
 
 #ifndef __GESTION_LCD__
 #define __GESTION_LCD__
@@ -43,7 +43,11 @@
 #define LIGHTS_POSITION_SDC_GREEN         (LIGHTS_POSITION_SDC + (2 * Font16Symbols.Width) + (Font16Symbols.Width / 3))
 #define LIGHTS_POSITION_SDC_YELLOW        (LIGHTS_POSITION_SDC_GREEN + 12)
 #define LIGHTS_POSITION_SDC_RED           (LIGHTS_POSITION_SDC_YELLOW + 12)
-#define LIGHTS_POSITION_SDC_BLUE          (LIGHTS_POSITION_SDC_RED + 12)
+
+//#define LIGHTS_POSITION_SDC_BLUE          (LIGHTS_POSITION_SDC_RED + 12)
+
+// Supperposition des 2 Led GREEN et BLUE
+#define LIGHTS_POSITION_SDC_BLUE          (LIGHTS_POSITION_SDC_GREEN)
 
 #define LIGHTS_POSITION_Y       115
 

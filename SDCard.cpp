@@ -1,4 +1,4 @@
-// $Id: SDCard.cpp,v 1.4 2025/05/25 12:52:37 administrateur Exp $
+// $Id: SDCard.cpp,v 1.11 2025/06/14 15:32:55 administrateur Exp $
 
 #if USE_SIMULATION
 #include "ArduinoTypes.h"
@@ -25,17 +25,20 @@ SPIClass spi1(HSPI); // Use the HSPI bus
 #define SDCARD_SIMU_SIZE             8000000L      // Taille de la SDCard simulee
 #endif
 
+#if 0
 void callback_activate_sdcard()
 {
   g__sdcard->callback_sdcard_retry_init_more();
 
   g__sdcard->appendFile(NAME_OF_FILE_GPS_FRAMES, "\n\n### New recording ###\n");
 }
+#endif
 
 SDCard::SDCard() : flg_init(false), nbr_of_init_retry(0),
                    cardType(CARD_NONE), cardSize((uint64_t)-1),
-                   flg_sdcard_in_use(false), flg_inh_append_gps_frame(true),
-                   gps_frame_size(0), gps_frame_nbr_records(0)
+                   flg_sdcard_in_use(false), flg_inh_append_gps_frame(false),
+                   gps_frame_size(0), gps_frame_nbr_records(0),
+                   m__filename_frames("")
 {
   Serial.println("SDCard::SDCard()");
 }
@@ -105,6 +108,14 @@ bool SDCard::init()
   else {
     flg_init = true;
     l__flg_rtn = true;
+
+#if USE_SIMULATION
+    Serial.printf("%s(): SD Card mount successful: [%s] [%u] bytes\n", __FUNCTION__, SDCARD_SIMU_LOCALIZATION, SDCARD_SIMU_SIZE);
+#endif
+  
+    // Test de contenu + tri
+    printf("%s(): List dir of [%s]\n", __FUNCTION__, "/EPOWER");
+    listDir("/EPOWER");
 
     g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_GREEN, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, GREEN);
 
@@ -216,6 +227,12 @@ bool SDCard::appendGpsFrame(const char *i__frame, boolean i__flg_force_append)
   static size_t g__size_pre   = (size_t)-1;
   static size_t g__size_frame = (size_t)0;
 
+  String l__filename_frame = "";
+  l__filename_frame.concat(FRAMES_DIRECTORY);
+  l__filename_frame.concat(m__filename_frames.c_str());
+
+  Serial.printf("%s(): [%s] Entering...\n", __FUNCTION__, l__filename_frame.c_str());
+
   if (flg_init == false || flg_inh_append_gps_frame == true
    || (g__flg_inh_sdcard_ope == true && i__flg_force_append == false)) {
     return true;
@@ -225,12 +242,12 @@ bool SDCard::appendGpsFrame(const char *i__frame, boolean i__flg_force_append)
 
   startActivity();
 
-  File file = SD.open(NAME_OF_FILE_GPS_FRAMES, FILE_APPEND);
+  File file = SD.open(l__filename_frame.c_str(), FILE_APPEND);
 
   if (!file) {
     // Failed to open file for appending
-#if 0
-    Serial.printf("SDCard::appendGpsFrame(%s): Failed to open file for appending\n", NAME_OF_FILE_GPS_FRAMES);
+#if 1
+    Serial.printf("SDCard::appendGpsFrame(): [%s] Failed to open file for appending\n", l__filename_frame.c_str());
 #endif
 
     l__flg_rtn = false;
@@ -240,33 +257,53 @@ bool SDCard::appendGpsFrame(const char *i__frame, boolean i__flg_force_append)
 
     if (g__size_pre != (size_t)-1) {
       if (l__size == (g__size_pre + g__size_frame)) {
-#if 0
+#if 1
         // Trace de l'operation
-        Serial.printf("SDCard::appendGpsFrame(%s): Write length: %d = (%d + %d) bytes\n",
-          NAME_OF_FILE_GPS_FRAMES, l__size, g__size_pre, g__size_frame);
+        Serial.printf("SDCard::appendGpsFrame(): [%s] Write length: %d = (%d + %d) bytes\n",
+          l__filename_frame.c_str(), l__size, g__size_pre, g__size_frame);
 #endif
       }
-      else {
-#if 0
+      else if (gps_frame_nbr_records >= 2) {
+        /* TODO: => Trace "SDCard::appendGpsFrame(): #1: [1852404375] bytes" ?!..
+                 => Trace "error SDCard::appendGpsFrame(): [/EPOWER/EPower-01080000-0000.txt] Error length: 50 != (1852404325 + 50) bytes"
+
+           Ensuite Ok:
+                 => Trace "SDCard::appendGpsFrame(): [/EPOWER/EPower-01080000-0000.txt] Write length: 812 = (558 + 254) bytes"
+        */
+#if 1
         // Trace de l'erreur
-        Serial.printf("error SDCard::appendGpsFrame(%s): Error length: %d != (%d + %d) bytes\n",
-          NAME_OF_FILE_GPS_FRAMES, l__size, g__size_pre, g__size_frame);
+        Serial.printf("error SDCard::appendGpsFrame(): [%s] Error length: %d != (%d + %d) bytes\n",
+          l__filename_frame.c_str(), l__size, g__size_pre, g__size_frame);
 #endif
 
         l__flg_rtn = false;
       }
+      else {
+        Serial.printf("SDCard::appendGpsFrame(): [%s] No test of size (#%u record)\n",
+          l__filename_frame.c_str(), gps_frame_nbr_records);
+      }
     }
 
-    g__size_pre = l__size;              // Longueur du fichier avant maj
+    g__size_pre = l__size;                        // Longueur du fichier avant maj
     g__size_frame = strlen(i__frame);   // Longueur a ecrire sans le '\0' terminal ;-)
 
     if (!file.print(i__frame)) {
       // Line not appended
+
+      // Trace de l'ecriture
+      Serial.printf("error SDCard::appendGpsFrame(): Line not appended\n");
+
       l__flg_rtn = false;
     }
     else {
       gps_frame_size = (l__size + strlen(i__frame));
       gps_frame_nbr_records++;
+
+#if 1
+      // Trace de l'ecriture
+      Serial.printf("SDCard::appendGpsFrame(): #%u: [%u] bytes\n",
+        gps_frame_nbr_records, gps_frame_size);
+#endif
     }
 
     file.close();
@@ -322,31 +359,47 @@ bool SDCard::printInfos()
   return l__flg_rtn;
 }
 
+/*   Liste des repertoires et fichiers
+   + Determination du prochain fichier 'undated_file' non date de la forme '/EPOWER/EPower-NNNN00DD-0000.txt'
+
+   => TODO: Si dernier fichier '/EPOWER/EPower-19990000-0000.txt' trouve
+            => Passer en erreur et pas d'ecriture dans 'undated_file' ;-)
+ */
 bool SDCard::listDir(const char *i__dir)
 {
   bool l__flg_rtn = false;
+  String l__last_undated_file = UNDATED_FILE_PATTERN;
 
   startActivity();
 
   File root = SD.open(i__dir);
   if (!i__dir) {
     // Failed to open directory
-     Serial.printf("SDCard::listDir(NULL): Failed to open directory\n");
+     Serial.printf("error SDCard::listDir(NULL): Failed to open directory\n");
   }
   else {
     if (!root.isDirectory()) {
       // Not a directory
-      Serial.printf("SDCard::listDir(%s): Not a directory\n", i__dir);
+      Serial.printf("error SDCard::listDir(%s): Not a directory\n", i__dir);
     }
     else {
+      char l__pattern_years[4+1];
+      memset(l__pattern_years, '\0', sizeof(l__pattern_years));
+
       File file = root.openNextFile();
 
-      while (file)
-      {
+      while (file) {
         if (file.isDirectory()) {
-          Serial.print("  Dir: [");
+          Serial.print("  Dir:  [");
           Serial.print(file.name());
           Serial.print("]\n");
+
+#if USE_SIMULATION
+          // Pas de sortie si repertoire ".", ".." ou "CVS" trouve
+          if (strcmp(file.name(), ".") && strcmp(file.name(), "..") && strcmp(file.name(), "CVS")) {
+            printf("  Dir:  [%s]\n", file.name());
+          }
+#endif
         }
         else {
           Serial.print("  File: [");
@@ -354,9 +407,62 @@ bool SDCard::listDir(const char *i__dir)
           Serial.print("] Size: [");
           Serial.print(file.size());
           Serial.print("]\n");
+
+#if USE_SIMULATION
+          printf("  File: [%s] Size [%lu]\n", file.name(), file.size());
+#endif
+          // Dernier fichier non date
+          char l__pattern_months[2+1];
+          memset(l__pattern_months, '\0', sizeof(l__pattern_months));
+          strncpy(l__pattern_months, (file.name() + strlen(UNDATED_FILE_PATTERN_MONTHS)), 2);
+
+          if (!strcmp(l__pattern_months, "00") && strcmp(file.name(), l__last_undated_file.c_str()) > 0) {
+            strncpy(l__pattern_years, (file.name() + strlen(UNDATED_FILE_PATTERN_YEARS)), 4);
+
+#if 0 //USE_SIMULATION
+            printf("-> [%s] > [%s] (Year [%04u])\n",
+              file.name(), l__last_undated_file.c_str(), (int)strtol(l__pattern_years, NULL, 10));
+#endif
+            l__last_undated_file = file.name();
+          }
         }
 
         file = root.openNextFile();
+      }
+
+      if (m__filename_frames.isEmpty()) {
+        char *l__new_last_undated_file = strdup(l__last_undated_file.c_str());
+        sprintf(l__new_last_undated_file, "%s%04u0000-0000.txt",
+          UNDATED_FILE_PATTERN_YEARS, ((int)strtol(l__pattern_years, NULL, 10)) + 1);
+
+        m__filename_frames = l__new_last_undated_file;
+        free(l__new_last_undated_file);
+
+        Serial.printf("  New Last Undated File: [%s]\n", m__filename_frames.c_str());
+
+#if USE_SIMULATION
+        printf("  New Last Undated File: [%s]\n", m__filename_frames.c_str());
+#endif
+
+        // Marquage du nouveau fichier non date...
+        if (getInhAppendGpsFrame() == false) {
+          String l__text = "";
+
+          l__text.concat("#File [");
+          l__text.concat(m__filename_frames);
+          l__text.concat("]\n");
+          l__text.concat("#Start Recording\n");
+
+          appendGpsFrame(l__text);
+        }
+        // Fin: Marquage du nouveau fichier non date...
+      }
+      else {
+        Serial.printf("  Last Undated File: [%s]\n", m__filename_frames.c_str());
+
+#if USE_SIMULATION
+        printf("  Last Undated File: [%s]\n", m__filename_frames.c_str());
+#endif
       }
 
       l__flg_rtn = true;

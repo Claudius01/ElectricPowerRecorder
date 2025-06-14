@@ -1,4 +1,4 @@
-// $Id: GestionLCD.cpp,v 1.49 2025/05/31 14:07:20 administrateur Exp $
+// $Id: GestionLCD.cpp,v 1.50 2025/06/02 14:42:46 administrateur Exp $
 
 #if USE_SIMULATION
 #include "ArduinoTypes.h"
@@ -1518,7 +1518,7 @@ void Paint::Paint_UpdateBargraph24H()
 /* Warning: L'initialisation des 2 attributs 'm__screen_virtual_period' et 'm__sub_menu_period' doivent etre coherent ;-)
  */
 GestionLCD::GestionLCD() : m__screen_virtual_period(SCREEN_VIRTUAL_PERIOD_5_MIN),
-                           m__sub_menu_period(SUB_MENU_PERIOD_5_MINUTES), m__sub_menu_unit(SUB_MENU_UNIT_MILLIS_VOLTS)                      
+                           m__sub_menu_period(SUB_MENU_PERIOD_5_MINUTES), m__sub_menu_unit(SUB_MENU_UNIT_WATTS_HOUR)                      
 {
   Serial.printf("GestionLCD::GestionLCD() m__sub_menu_period [%d] m__sub_menu_unit [%d]\n", m__sub_menu_period, m__sub_menu_unit);
 }

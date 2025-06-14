@@ -1,4 +1,4 @@
-// $Id: ElectricPowerRecorder.ino,v 1.62 2025/05/31 13:47:57 administrateur Exp $
+// $Id: ElectricPowerRecorder.ino,v 1.83 2025/06/14 15:32:55 administrateur Exp $
 
 /* Projet: ElectricPowerRecorder
 */
@@ -32,7 +32,7 @@
 #endif
 
 #define COPYRIGHT   "@micro-infos.com"
-#define PROMPT      "ElectricPowerRecorder 2025/05/31 V1.5"
+#define PROMPT      "ElectricPowerRecorder 2025/06/14 V1.7"
 
 #define USE_INCOMING_CMD    1
 
@@ -52,6 +52,14 @@ extern void gestionOfCommands();
 //#define TIMER_RATIO           10000       // Ratio for 100 uS
 #define TIMER_RATIO           20000       // Ratio for 50 uS
 
+#if USE_SIMULATION
+#define DERIVE_RATIO_DECREASE        0.6
+#define DERIVE_RATIO_INCREASE        1.2
+#else
+#define DERIVE_RATIO_DECREASE        0.7
+#define DERIVE_RATIO_INCREASE        1.3
+#endif
+
 #define COUNTER_FOR_1_MS      20          // Comptabilisation des 1 mS
 #define COUNTER_FOR_1_25_MS   25          // Comptabilisation des 1.25 mS
 #define COUNTER_FOR_2_5_MS    50          // Comptabilisation des 2.5 mS
@@ -59,7 +67,22 @@ extern void gestionOfCommands();
 #define COUNTER_FOR_100_MS    2000        // Comptabilisation des 100 mS
 #define COUNTER_FOR_500_MS    10000       // Comptabilisation des 1/2 secondes
 #define COUNTER_FOR_1_SEC     20000       // Comptabilisation des secondes
-//#define COUNTER_FOR_1_SEC     40000       // Comptabilisation des secondes (dilatation du temps)
+
+#define COUNTER_FOR_1_MS_DECREASE     (uint32_t)(DERIVE_RATIO_DECREASE * COUNTER_FOR_1_MS)
+#define COUNTER_FOR_1_25_MS_DECREASE  (uint32_t)(DERIVE_RATIO_DECREASE * COUNTER_FOR_1_25_MS)
+#define COUNTER_FOR_2_5_MS_DECREASE   (uint32_t)(DERIVE_RATIO_DECREASE * COUNTER_FOR_2_5_MS)
+#define COUNTER_FOR_10_MS_DECREASE    (uint32_t)(DERIVE_RATIO_DECREASE * COUNTER_FOR_10_MS)
+#define COUNTER_FOR_100_MS_DECREASE   (uint32_t)(DERIVE_RATIO_DECREASE * COUNTER_FOR_100_MS)
+#define COUNTER_FOR_500_MS_DECREASE   (uint32_t)(DERIVE_RATIO_DECREASE * COUNTER_FOR_500_MS)
+#define COUNTER_FOR_1_SEC_DECREASE    (uint32_t)(DERIVE_RATIO_DECREASE * COUNTER_FOR_1_SEC)
+
+#define COUNTER_FOR_1_MS_INCREASE     (uint32_t)(DERIVE_RATIO_INCREASE * COUNTER_FOR_1_MS)
+#define COUNTER_FOR_1_25_MS_INCREASE  (uint32_t)(DERIVE_RATIO_INCREASE * COUNTER_FOR_1_25_MS)
+#define COUNTER_FOR_2_5_MS_INCREASE   (uint32_t)(DERIVE_RATIO_INCREASE * COUNTER_FOR_2_5_MS)
+#define COUNTER_FOR_10_MS_INCREASE    (uint32_t)(DERIVE_RATIO_INCREASE * COUNTER_FOR_10_MS)
+#define COUNTER_FOR_100_MS_INCREASE   (uint32_t)(DERIVE_RATIO_INCREASE * COUNTER_FOR_100_MS)
+#define COUNTER_FOR_500_MS_INCREASE   (uint32_t)(DERIVE_RATIO_INCREASE * COUNTER_FOR_500_MS)
+#define COUNTER_FOR_1_SEC_INCREASE    (uint32_t)(DERIVE_RATIO_INCREASE * COUNTER_FOR_1_SEC)
 
 #if !USE_SIMULATION
 hw_timer_t    *g__timer = NULL;
@@ -95,30 +118,71 @@ volatile uint32_t   g__pass_on_timer = 0;
 
 volatile bool       g__flg_expired_1ms = false;
 volatile bool       g__flg_expired_1_25ms = false;
-//volatile bool       g__flg_expired_2_5ms = false;
 volatile bool       g__flg_expired_10ms = false;
 volatile bool       g__flg_expired_100ms = false;
 volatile bool       g__flg_expired_500ms = false;
 volatile bool       g__flg_expired_1_sec = false;
 
+volatile long       g__duration_diff = 0L;
+
 ESP32Time *g__rtc = NULL;
 
-/* Methode de cadencement toutes les 50 uS
-   => Cf. 'https://espressif-docs.readthedocs-hosted.com/projects/arduino-esp32/en/latest/api/timer.html'
-*/
-#if !USE_SIMULATION
-void ARDUINO_ISR_ATTR onTimer()
-#else
-void onTimer()
-#endif
+void testPassOnTimerWithRatioIncrease()
 {
-  // Increment the counter and set the time of ISR
-#if !USE_SIMULATION
-  portENTER_CRITICAL_ISR(&g__timerMux);
-#endif
+  if ((g__pass_on_timer % COUNTER_FOR_1_MS_INCREASE) == 0) {
+    g__flg_expired_1ms = true;
+  }
 
-  g__pass_on_timer++;
+  if ((g__pass_on_timer % COUNTER_FOR_1_25_MS_INCREASE) == 0) {
+    g__flg_expired_1_25ms = true;
+  }
 
+  if ((g__pass_on_timer % COUNTER_FOR_10_MS_INCREASE) == 0) {
+    g__flg_expired_10ms = true;
+  }
+
+  if ((g__pass_on_timer % COUNTER_FOR_100_MS_INCREASE) == 0) {
+    g__flg_expired_100ms = true;
+  }
+
+  if ((g__pass_on_timer % COUNTER_FOR_500_MS_INCREASE) == 0) {
+    g__flg_expired_500ms = true;
+  }
+
+  if ((g__pass_on_timer % COUNTER_FOR_1_SEC_INCREASE) == 0) {
+    g__flg_expired_1_sec = true;
+  }
+}
+
+void testPassOnTimerWithRatioDecrease()
+{
+  if ((g__pass_on_timer % COUNTER_FOR_1_MS_DECREASE) == 0) {
+    g__flg_expired_1ms = true;
+  }
+
+  if ((g__pass_on_timer % COUNTER_FOR_1_25_MS_DECREASE) == 0) {
+    g__flg_expired_1_25ms = true;
+  }
+
+  if ((g__pass_on_timer % COUNTER_FOR_10_MS_DECREASE) == 0) {
+    g__flg_expired_10ms = true;
+  }
+
+  if ((g__pass_on_timer % COUNTER_FOR_100_MS_DECREASE) == 0) {
+    g__flg_expired_100ms = true;
+  }
+
+  if ((g__pass_on_timer % COUNTER_FOR_500_MS_DECREASE) == 0) {
+    g__flg_expired_500ms = true;
+  }
+
+  if ((g__pass_on_timer % COUNTER_FOR_1_SEC_DECREASE) == 0) {
+    g__flg_expired_1_sec = true;
+  }
+}
+
+void testPassOnTimerWithoutRatio()
+{
   if ((g__pass_on_timer % COUNTER_FOR_1_MS) == 0) {
     g__flg_expired_1ms = true;
   }
@@ -141,6 +205,44 @@ void onTimer()
 
   if ((g__pass_on_timer % COUNTER_FOR_1_SEC) == 0) {
     g__flg_expired_1_sec = true;
+  }
+}
+
+/* Methode de cadencement toutes les 50 uS
+   => Cf. 'https://espressif-docs.readthedocs-hosted.com/projects/arduino-esp32/en/latest/api/timer.html'
+*/
+#if !USE_SIMULATION
+void ARDUINO_ISR_ATTR onTimer()
+#else
+void onTimer()
+#endif
+{
+  // Increment the counter and set the time of ISR
+#if !USE_SIMULATION
+  portENTER_CRITICAL_ISR(&g__timerMux);
+#endif
+
+  g__pass_on_timer++;
+
+  /* 'g__duration_diff' = Duree de fonctionnement "logiciel" ('g__date_time->getDurationInUse()') comptabilise au moyen de 'COUNTER_FOR_1_SEC'
+     moins la duree "Materielle" ('g__date_time->getEpochDiff()') fournie par le RTC
+     => Si 'g__duration_diff' est negative; les ticks "logiciels" sont trop rapides @ reference materielle
+        => Les seuils sont donc a augmenter au moyen du ratio 'DERIVE_RATIO_INCREASE'
+     => Sinon, si 'g__duration_diff' est positive; les ticks "logiciels" sont trop lents @ reference materielle
+        => Les seuils sont donc a diminuer au moyen du ratio 'DERIVE_RATIO_DECREASE'
+     => Sinon ('g__duration_diff' est nulle); les ticks "logiciels" sont cales (du moins temporairement sur la reference materielle)
+        => Les seuils utilises sont ceux par defaut ;-)
+  
+    Remarque: Le test de comparaison de 'g__duration_diff' a zero est effectue en premmier car c'est le cas le plus occurent...
+  */
+  if (g__duration_diff == 0L) {
+    testPassOnTimerWithoutRatio();
+  }
+  else if (g__duration_diff < 0L) {
+    testPassOnTimerWithRatioDecrease();
+  }
+  else if (g__duration_diff > 0L) {
+    testPassOnTimerWithRatioIncrease();
   }
 
 #if !USE_SIMULATION
@@ -194,17 +296,23 @@ void callback_exec_chenillard()
 
   if (g__chenillard & 0x0001) {
     g__state_leds |= STATE_LED_GREEN;
-    g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_GREEN, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, GREEN);
+    g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_GREEN, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK,
+      (g__duration_diff == 0L) ? GREEN : YELLOW);
   }
   else {
     g__state_leds &= ~STATE_LED_GREEN;
-    g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_GREEN, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, GREEN);
+    g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_GREEN, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK,
+      (g__duration_diff == 0L) ? GREEN : YELLOW);
   }
 
   g__timers->start(TIMER_CHENILLARD, DURATION_TIMER_CHENILLARD, &callback_exec_chenillard);
 }
 
-// This function will be called when the button started long pressed.
+/* This function will be called when the button started long pressed
+  => Permet une recuperation si le programme boucle en exception ;-(
+     => Si probleme de reprogrammation (bouclage infini dans une exception)
+        => Connecter l'ESP32-S3-GEEK avec le bouton enfonce...
+*/
 void callback_long_press_start(void *oneButton)
 {
   Serial.print("callback_long_press_start(): Entering...\n");
@@ -225,7 +333,6 @@ void callback_click(void *oneButton)
 {
   //Serial.print("callback_click(): Entering...\n");
 
-#if 1
   if (g__menus->getMenuInProgress() == MENU_RTC_IN_PROGRESS) {
     // Delegation a la classe 'ConfigRTC'
     g__config_rtc->click_button();
@@ -233,38 +340,6 @@ void callback_click(void *oneButton)
   else {
     g__menus->click_button();
   }
-#else
-  if (g__config_rtc == NULL) {
-    Serial.print("callback_click(): Ignore...\n");
-    return;
-  }
-
-  if (g__config_rtc->isDone()) {
-    char l__buffer[32];
-    memset(l__buffer, '\0', sizeof(l__buffer));
-    g__sdcard->formatSize(g__sdcard->getGpsFrameSize(), l__buffer);
-
-    // Ecriture sur la SDCard du resultat avant l'action
-    if (g__sdcard->getInhAppendGpsFrame() == false) {
-      g__sdcard->appendGpsFrame("#Stop recording\n");
-
-      //g__gestion_lcd->Paint_DrawString_EN(6 + (13 * 11), 56, l__buffer, &Font16, BLACK, YELLOW);
-    }
-
-    // Bascule "Autorisation/Inhibition" concatenation infos dans la SDCard
-    g__sdcard->setInhAppendGpsFrame(g__sdcard->getInhAppendGpsFrame() ? false : true);
-
-    // Ecriture sur la SDCard du resultat apres l'action
-    if (g__sdcard->getInhAppendGpsFrame() == false) {
-      g__sdcard->appendGpsFrame("#Start recording\n");
-
-      //g__gestion_lcd->Paint_DrawString_EN(6 + (13 * 11), 56, l__buffer, &Font16, BLACK, WHITE);
-    }
-  }
-  else {
-    g__config_rtc->click_button();
-  }
-#endif
 }
 
 void callback_double_click(void *oneButton)
@@ -346,17 +421,22 @@ void testSymbology()
   //g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_YELLOW_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, YELLOW);
   //g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_RED_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, RED);
 
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_ACQ_GRAY, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, GRAY);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_ACQ_GRAY, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, YELLOW);
 
   g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_GREEN, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, GREEN);
   g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_YELLOW, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, YELLOW);
   g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_RED, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, RED);
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_BLUE, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, BLUE);
+
+#if 0
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_BLUE, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, WHITE);
+#endif
 
   delay(1000);
 
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_BLUE, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, BLUE);
+#if 0
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_BLUE, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, WHITE);
   delay(500);
+#endif
 
   g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_RED, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, RED);
   delay(500);
@@ -375,7 +455,7 @@ void testSymbology()
   delay(500);
 #endif
 
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_ACQ_GRAY, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, GRAY);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_ACQ_GRAY, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, YELLOW);
   delay(500);
 
   g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_GREEN, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, GREEN);
@@ -406,29 +486,41 @@ void readAndDrawElectricPower(AnalogRead *i__analog_read, UWORD i__y)
 
   bool l__new_values = i__analog_read->readValue();
 
-  if (l__new_values) {  
-    i__analog_read->formatValueCurrent(ANALOG_MIN, l__text_for_lcd);
-    g__gestion_lcd->Paint_DrawString_EN(2, i__y, l__text_for_lcd, &Font16, BLACK, WHITE);
+  //Serial.printf("%s(): Entering..\n", __FUNCTION__);
 
-    // Presentation dans l'ordre croissant des valeurs...
-    if (i__analog_read->getValueCurrent(ANALOG_AVG) < i__analog_read->getValueCurrent(ANALOG_SNAPSHOT)) {
-      i__analog_read->formatValueCurrent(ANALOG_AVG, l__text_for_lcd);
-      g__gestion_lcd->Paint_DrawString_EN(2 + (11 * 5), i__y, l__text_for_lcd, &Font16, BLACK, GREEN);
+  //if (l__new_values) {
+    ENUM_TYPE_UNIT l__unit = i__analog_read->getTypeUnit();
 
-      i__analog_read->formatValueCurrent(ANALOG_SNAPSHOT, l__text_for_lcd);
-      g__gestion_lcd->Paint_DrawString_EN(2 + (11 * 10), i__y, l__text_for_lcd, &Font16, BLACK, YELLOW);
+    if (l__unit == UNIT_MILLI_VOLTS || l__unit == UNIT_WATTS) {
+      i__analog_read->formatValueCurrent(ANALOG_MIN, l__text_for_lcd);
+      g__gestion_lcd->Paint_DrawString_EN(2, i__y, l__text_for_lcd, &Font16, BLACK, WHITE);
+
+      // Presentation dans l'ordre croissant des valeurs...
+      if (i__analog_read->getValueCurrent(ANALOG_AVG) < i__analog_read->getValueCurrent(ANALOG_SNAPSHOT)) {
+        i__analog_read->formatValueCurrent(ANALOG_AVG, l__text_for_lcd);
+        g__gestion_lcd->Paint_DrawString_EN(2 + (11 * 5), i__y, l__text_for_lcd, &Font16, BLACK, GREEN);
+
+        i__analog_read->formatValueCurrent(ANALOG_SNAPSHOT, l__text_for_lcd);
+        g__gestion_lcd->Paint_DrawString_EN(2 + (11 * 10), i__y, l__text_for_lcd, &Font16, BLACK, YELLOW);
+      }
+      else {
+        i__analog_read->formatValueCurrent(ANALOG_SNAPSHOT, l__text_for_lcd);
+        g__gestion_lcd->Paint_DrawString_EN(2 + (11 * 5), i__y, l__text_for_lcd, &Font16, BLACK, YELLOW);
+
+        i__analog_read->formatValueCurrent(ANALOG_AVG, l__text_for_lcd);
+        g__gestion_lcd->Paint_DrawString_EN(2 + (11 * 10), i__y, l__text_for_lcd, &Font16, BLACK, GREEN);
+      }
+      // Fin: Presentation dans l'ordre croissant des valeurs...
+
+      i__analog_read->formatValueCurrent(ANALOG_MAX, l__text_for_lcd);
+      g__gestion_lcd->Paint_DrawString_EN(2 + (11 * 15), i__y, l__text_for_lcd, &Font16, BLACK, RED);
     }
-    else {
-      i__analog_read->formatValueCurrent(ANALOG_SNAPSHOT, l__text_for_lcd);
-      g__gestion_lcd->Paint_DrawString_EN(2 + (11 * 5), i__y, l__text_for_lcd, &Font16, BLACK, YELLOW);
-
-      i__analog_read->formatValueCurrent(ANALOG_AVG, l__text_for_lcd);
-      g__gestion_lcd->Paint_DrawString_EN(2 + (11 * 10), i__y, l__text_for_lcd, &Font16, BLACK, GREEN);
+#if 0
+    // Presentations des consommations synchrones du flash "Wh"
+    else if (l__unit == UNIT_WATTS_HOUR) {
+      i__analog_read->drawConsommations(i__y);
     }
-    // Fin: Presentation dans l'ordre croissant des valeurs...
-
-    i__analog_read->formatValueCurrent(ANALOG_MAX, l__text_for_lcd);
-    g__gestion_lcd->Paint_DrawString_EN(2 + (11 * 15), i__y, l__text_for_lcd, &Font16, BLACK, RED);
+#endif
 
     if (i__analog_read->getNbrSamples() > 1) {
       // Effacement de la valeur courante avant toute chose
@@ -455,7 +547,7 @@ void readAndDrawElectricPower(AnalogRead *i__analog_read, UWORD i__y)
       // Raffraichissement de la valeur courante apres toute chose
       g__gestion_lcd->Paint_DrawBarGraph(i__y + 16, i__analog_read->getValueCurrent(ANALOG_SNAPSHOT), i__analog_read->getValueMax(), 12, &Font16Symbols, YELLOW);
     }
-  }
+  //}
 
 #if 0
   sprintf(l__text_for_lcd, "#%lu", i__analog_read->getNbrSamples());
@@ -586,6 +678,20 @@ void setup()
 
   g__menus = new Menus();
 
+  switch (g__menus->getSubMenuUnitCurrent()) {
+  case SUB_MENU_UNIT_MILLIS_VOLTS:
+    g__analog_read_1->setTypeUnit(UNIT_MILLI_VOLTS);
+    break;
+  case SUB_MENU_UNIT_WATTS:
+    g__analog_read_1->setTypeUnit(UNIT_WATTS);
+    break;
+  case SUB_MENU_UNIT_WATTS_HOUR:
+    g__analog_read_1->setTypeUnit(UNIT_WATTS_HOUR);
+    break;
+  default:
+    break;
+  }
+
   // Bargraphe des valeurs min, avg, max et courante
   g__gestion_lcd->Paint_DrawBarGraph(29 + 16, &Font16Symbols, GRAY);
 
@@ -660,8 +766,27 @@ void loop()
     // Update Epoch from RTC toutes les 500 mS
     g__date_time->setRtcSecInDayGmt();
 
-    g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_BLUE, LIGHTS_POSITION_Y,
-      (g__sdcard->getInhAppendGpsFrame() ? LIGHT_FULL_IDX : LIGHT_BORD_IDX), &Font16Symbols, BLACK, BLUE);
+    if (g__sdcard->isInit()) {
+      if (g__sdcard->getInhAppendGpsFrame()) {
+        // La SDCard est initialisee et non autorisee a ecrire
+        g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_BLUE, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, WHITE);
+      }
+      else {
+        // La SDCard est initialisee et autorisee a ecrire
+        g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_GREEN, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, GREEN);
+      }
+    }
+    else {
+      // La SDCard n'est pas initialisee
+      if (g__sdcard->getInhAppendGpsFrame()) {
+        // La SDCard est non autorisee a ecrire (presentation)
+        g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_BLUE, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, WHITE);
+      }
+      else {
+        // La SDCard est autorisee a ecrire (presentation)
+        g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_GREEN, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, GREEN);
+      }
+    }
 
     noInterrupts();
     g__flg_expired_500ms = false;
@@ -669,13 +794,44 @@ void loop()
   }
 
   if (g__flg_expired_1_sec) {
-#if USE_SIMULATION
-    // Gestion du nombres de secondes depuis 00h00'00" a partir du RTC
-    Serial.printf("#1: Epoch [%lu] -> [%lu] Sec (%02uh%02u'%02u\" GMT+%d)\n", g__date_time->getRtcSecInDayGmt(), g__date_time->getRtcSecInDayLocal(),
-      (unsigned int)(g__date_time->getRtcSecInDayLocal() / 3600L),           // Heures
-      (unsigned int)((g__date_time->getRtcSecInDayLocal() % 3600L) / 60L),   // Minutes
-      (unsigned int)((g__date_time->getRtcSecInDayLocal() % 3600L) % 60L),   // Secondes
-      g__date_time->getRtcSecInDayOffset());
+    /* Initialisation de l'Epoch Start...
+       => Fait ici, car si fait dans 'ConfigRTC::setDone()' et apres 'g__rtc->setTimeStruct(m__timeinfo_in_acquisition)'
+          => L'epoch est errone avec une valeur constante ne correspondant pas a la vrai valeur attendue ?!..
+    */
+    if (g__config_rtc->isDone() == true && g__date_time->getEpochStart() == 0L) {
+      g__date_time->setEpochStart(g__rtc->getEpoch());
+      g__date_time->setDurationInUse(0L);
+
+      Serial.printf("%s(): Epoch Start [%lu]\n", __FUNCTION__, g__date_time->getEpochStart());
+    }
+    // Fin: Initialisation de l'Epoch Start...
+
+    // Lecture de l'epoch depusi le RTC et calcul de la difference @ l'Epoch Start
+    g__date_time->setEpochAndDiff(g__rtc->getEpoch());
+
+    // Duree de fonctionnement
+    g__date_time->incDurationInUse();
+
+#if 1   //USE_SIMULATION
+    // Derive @ l'epoch 'Hard' considere comme la reference temporelle ;-)
+    g__duration_diff = (g__date_time->getDurationInUse() - g__date_time->getEpochDiff());
+
+    /* Traces de gestion des temps (1 fois toutes les minutes)...
+       => Test avec la duree logicielle car la duree @ RTC peut ne pas etre un multiple de 60 secondes
+          compte tenue de la lecture ici ;-)
+          => Le retour de 'g__date_time->getDurationInUse()' est toujours incremente de +1 ici ;-))
+    */
+    if ((g__date_time->getDurationInUse() % 60L) == 0) {
+      Serial.printf("#1: Epoch Start [%lu] (+%lu) Derive (%c%lu) Current [%lu] -> [%lu] Sec (%02uh%02u'%02u\" GMT+%d)\n",
+        g__date_time->getEpochStart(), g__date_time->getEpochDiff(),
+        (g__duration_diff < 0 ? '-' : '+'), (g__duration_diff < 0 ? -g__duration_diff : g__duration_diff),
+        g__date_time->getRtcSecInDayGmt(), g__date_time->getRtcSecInDayLocal(),
+        (unsigned int)(g__date_time->getRtcSecInDayLocal() / 3600L),           // Heures
+        (unsigned int)((g__date_time->getRtcSecInDayLocal() % 3600L) / 60L),   // Minutes
+        (unsigned int)((g__date_time->getRtcSecInDayLocal() % 3600L) % 60L),   // Secondes
+        g__date_time->getRtcSecInDayOffset());
+    }
+    // Fin: Traces de gestion des temps (1 fois toutes les minutes)...
 
     /* Calcul de la plage [begin, ..., end] correspondant au debut et a la fin la periode @ definition
        => Warning: 'g__date_time->isRtcSecInDayInRange()' gere une bascule...
@@ -718,6 +874,36 @@ void loop()
 
     // Read and presentation of the electric power
     readAndDrawElectricPower(g__analog_read_1, 29);
+
+    /* Datation, maj et Ecriture de la trame d'enregistrement toutes les xx minutes...
+    */
+    if ((g__date_time->getDurationInUse() % (60L)) == 0) {
+      // Emission et reinitialisation de la trame d'enregistement
+      if (g__analog_read_1->isFrameRecordingInUse() == true) {
+        g__analog_read_1->writeFrameRecording();
+      }
+
+      char l__hhmmss[32];
+      memset(l__hhmmss, '\0', sizeof(l__hhmmss));
+
+      sprintf(l__hhmmss, "%02u:%02u:%02u",
+        (unsigned int)(g__date_time->getRtcSecInDayLocal() / 3600L),            // Heures
+        (unsigned int)((g__date_time->getRtcSecInDayLocal() % 3600L) / 60L),    // Minutes
+        (unsigned int)((g__date_time->getRtcSecInDayLocal() % 3600L) % 60L));   // Secondes
+
+      if (g__config_rtc->isDone() == true) {
+        // Ajout du fuseau horaire si le RTC est configure
+        sprintf(&l__hhmmss[strlen(l__hhmmss)], " GMT+%d",
+          g__date_time->getRtcSecInDayOffset());                                // Fuseau horaire
+      }
+
+      g__analog_read_1->buildFrameRecording(l__hhmmss);
+    }
+  
+    if (g__analog_read_1->isFrameRecordingInUse() == true) {
+      g__analog_read_1->buildFrameRecording();
+    }
+    // Fin: Datation, maj et Ecriture de la trame d'enregistrement toutes les xx minutes...
 
     // Affichage des courbes min, moyenne et max horodatees
     g__gestion_lcd->Paint_UpdateLcdFromScreenVirtual();

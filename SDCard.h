@@ -1,4 +1,4 @@
-// $Id: SDCard.h,v 1.1 2025/03/30 18:09:46 administrateur Exp $
+// $Id: SDCard.h,v 1.4 2025/06/13 15:32:46 administrateur Exp $
 
 #ifndef __SDCARD__
 #define __SDCARD__
@@ -29,7 +29,12 @@
 #define SPI1_SS   34
 #endif
 
-#define NAME_OF_FILE_GPS_FRAMES       "/FRAME/GpsFrames.txt"
+#define UNDATED_FILE_PATTERN_YEARS    "EPower-"                     // Debut du fichier (pointage sur 'Year')
+#define UNDATED_FILE_PATTERN_MONTHS   "EPower-0000"                 // Suite (pointage sur 'Month')
+#define UNDATED_FILE_PATTERN          "EPower-00000000-0000.txt"    // Forme complete et nommage du 1st fichier
+#define FRAMES_DIRECTORY              "/EPOWER/"                    // Repertoire des fichiers d'enregistrements (dates et non dates)
+
+//#define NAME_OF_FILE_GPS_FRAMES       "/FRAME/GpsFrames.txt"
 
 #if !USE_SIMULATION
 class SDCard
@@ -48,6 +53,8 @@ class SDCard : public SD
 
     size_t      gps_frame_size;
     uint16_t    gps_frame_nbr_records;
+
+    String      m__filename_frames;
 
     bool preparing();
 
@@ -76,6 +83,7 @@ class SDCard : public SD
     bool getInhAppendGpsFrame() const { return flg_inh_append_gps_frame; };
 
     bool appendGpsFrame(const char *i__frame, boolean i__flg_force_append = false);
+    bool appendGpsFrame(const String &i__frame, boolean i__flg_force_append = false) { return appendGpsFrame(i__frame.c_str()); };
     size_t getGpsFrameSize() const { return gps_frame_size; };
 
     void formatSize(size_t i__value, char *o__buffer) const ;

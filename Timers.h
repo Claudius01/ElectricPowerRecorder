@@ -1,4 +1,4 @@
-// $Id: Timers.h,v 1.8 2025/05/25 09:55:12 administrateur Exp $
+// $Id: Timers.h,v 1.10 2025/06/03 15:40:57 administrateur Exp $
 
 #ifndef __TIMERS__
 #define __TIMERS__
@@ -23,15 +23,12 @@ constexpr long DURATION_TIMER_ACTIVATE_SDCARD = 100L;           // 1"
 
 constexpr long DURATION_TIMER_WATCHDOG = 100L;  		            // 1"
 
-#if 0
-constexpr long  DURATION_TIMER_CONFIG_RTC_SCROLLING = 200;      // 2"
-constexpr long  DURATION_TIMER_CONFIG_RTC_WAIT_ACQ = 300;       // 3"
-#endif
-
 constexpr long  DURATION_TIMER_ANALOG_ACQ = 50L;                // 500ms
 
 constexpr long  DURATION_TIMER_MENU_SCROLLING = 200;            // 2"
 constexpr long  DURATION_TIMER_MENU_WAIT_ACQ = 300;             // 3"
+
+constexpr long  DURATION_TIMER_CONSO_FLASH = 20;                // 200mS
 #else
 #define DURATION_TIMER_CHENILLARD          12L          // 120mS
 #define DURATION_TIMER_CONNECT             10 * 100L    // 10" before state 'NOT_CONNECTED'
@@ -49,16 +46,12 @@ constexpr long  DURATION_TIMER_MENU_WAIT_ACQ = 300;             // 3"
 
 #define DURATION_TIMER_WATCHDOG   100L 	 		            // 1"
 
-#if 0
-#define DURATION_TIMER_CONFIG_RTC_SCROLLING   100L       // 1"
-#define DURATION_TIMER_CONFIG_RTC_WAIT_ACQ    300L       // 3"
-#endif
-
 #define DURATION_TIMER_ANALOG_ACQ             50L       // 500ms
 
 #define DURATION_TIMER_MENU_SCROLLING         100L       // 1"
 #define DURATION_TIMER_MENU_WAIT_ACQ          300L       // 3"
 
+#define DURATION_TIMER_CONSO_FLASH            20L        // 200mS
 #endif
 
 typedef enum {
@@ -85,6 +78,9 @@ typedef enum {
 
   TIMER_MENU_SCROLLING,         // Timer pour le defilement des valeurs du menu a acquerir
   TIMER_MENU_WAIT_ACQ,          // Timer pour l'attente de fin d'acquisition des valeurs du menu a acquerir
+
+  TIMER_CONSO_FLASH,            // Timer pour le flash des 'W/h'
+  TIMER_CONSO_PERIOD,           // Timer pour la presentation des flash de consommation
 
 #if USE_SIMULATION
   TIMER_WATCHDOG,			        // Timer pour le chien de garde en simulation

@@ -1,4 +1,4 @@
-// $Id: DateTime.h,v 1.4 2025/05/05 16:31:25 administrateur Exp $
+// $Id: DateTime.h,v 1.6 2025/06/04 15:20:47 administrateur Exp $
 
 #ifndef __DATE_TIME__
 #define __DATE_TIME__
@@ -13,6 +13,9 @@
 
 // Années bissextiles
 #define LEAP_YEAR(year) ((year % 4) == 0)
+
+#define BEGIN_OF_OFF_PEAK_HOURS     (0 * 3600L)   // Debut des Heures Creuses (00h00)
+#define END_OF_OFF_PEAK_HOURS       (8 * 3600L)   // Fin   des Heures Creuses (08h00)
 
 typedef enum {
 	GMT,
@@ -98,6 +101,8 @@ class DateTime {
 
     unsigned long epoch_rtc_gmt;
     unsigned int  epoch_rtc_offset;
+  
+    unsigned long duration_in_use;
  
 		long my_mktime(ST_TM *timeptr);
 		long calculatedEpochTime(ST_DATE_AND_TIME *i__st_date_and_time);
@@ -118,7 +123,7 @@ class DateTime {
     long getEpochStart() const { return epoch_start; };
     void setEpochStart(long i__value) { epoch_start = i__value; };
     long getEpoch() const { return epoch; };
-    void setEpoch(long i__value) { epoch = i__value; epoch_diff = (epoch - epoch_start); };
+    void setEpochAndDiff(long i__value) { epoch = i__value; epoch_diff = (epoch - epoch_start); };
     long getEpochDiff() const { return epoch_diff; };
 
     void formatEpochDiff(char *o__buffer) const;
@@ -133,8 +138,12 @@ class DateTime {
     unsigned long getRtcSecInDayLocal() const { return ((epoch_rtc_gmt + (epoch_rtc_offset * 3600L)) % 86400L); };
     unsigned int  getRtcSecInDayOffset() const { return epoch_rtc_offset; };
     ENUM_IN_THE_PERIOD isRtcSecInDayInRange() const;
-
+ 
     void getRtcTimeForLcd(char *o__text_for_lcd);
+
+    void          setDurationInUse(unsigned long i__value) { duration_in_use = i__value; };
+    unsigned long getDurationInUse() const { return duration_in_use; };
+    void          incDurationInUse() { duration_in_use++; };
 };
 
 extern DateTime   *g__date_time;
