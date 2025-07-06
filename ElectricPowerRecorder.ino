@@ -1,4 +1,4 @@
-// $Id: ElectricPowerRecorder.ino,v 1.83 2025/06/14 15:32:55 administrateur Exp $
+// $Id: ElectricPowerRecorder.ino,v 1.93 2025/07/06 15:58:06 administrateur Exp $
 
 /* Projet: ElectricPowerRecorder
 */
@@ -32,7 +32,7 @@
 #endif
 
 #define COPYRIGHT   "@micro-infos.com"
-#define PROMPT      "ElectricPowerRecorder 2025/06/14 V1.7"
+#define PROMPT      "ElectricPowerRecorder 2025/07/06 V1.7"
 
 #define USE_INCOMING_CMD    1
 
@@ -717,6 +717,65 @@ void setup()
 #endif
 }
 
+/* Gestion de la trame d'enregistrement
+   => Methode appelee toutes les secondes "logicielles"
+*/
+void gestionFrameRecording()
+{
+  if ((g__date_time->getDurationInUse() % (60L)) == 0) {
+    // Emission et reinitialisation de la trame d'enregistement toutes les minutes
+    if (g__analog_read_1->isFrameRecordingInUse() == true) {
+      g__analog_read_1->writeFrameRecording();
+    }
+
+    char l__hhmmss[32];
+    memset(l__hhmmss, '\0', sizeof(l__hhmmss));
+
+    sprintf(l__hhmmss, "%02u:%02u:%02u",
+      (unsigned int)(g__date_time->getRtcSecInDayLocal() / 3600L),            // Heures
+      (unsigned int)((g__date_time->getRtcSecInDayLocal() % 3600L) / 60L),    // Minutes
+      (unsigned int)((g__date_time->getRtcSecInDayLocal() % 3600L) % 60L));   // Secondes
+
+    if (g__config_rtc->isDone() == true) {
+      // Ajout du fuseau horaire si le RTC est configure
+      sprintf(&l__hhmmss[strlen(l__hhmmss)], " GMT+%d",
+        g__date_time->getRtcSecInDayOffset());                                // Fuseau horaire
+    }
+
+    g__analog_read_1->buildFrameRecording(l__hhmmss);
+  }
+  
+  if (g__analog_read_1->isFrameRecordingInUse() == true) {
+    g__analog_read_1->buildFrameRecording();
+  }
+
+  /* Presentation des proprietes du fichier d'enregistrement toutes le 15 Sec.; a savoir:
+     - Le nom (tronque du fichier date ou non date)
+     - Le nombre d'enregistrements
+     - La taille du fichier d'enregistrement
+     - Le nombre d'erreurs d'acces a la SDCard (toutes actions confondues ;-)
+  */
+  if (g__menus->getFlgMenu() == false) {
+    // Presentation de la taille, nombre de records et d'erreurs
+    if ((g__date_time->getDurationInUse() % 60L) == 0L) {
+      // Nombre de records affiche apres l'ecriture de l'enregistrement...
+      g__sdcard->printNbrRecords();
+    }
+    else if ((g__date_time->getDurationInUse() % 60L) == 15L) {
+      // ... suivi du Nom de fichier.
+      g__sdcard->printNameFile();
+    }
+    else if ((g__date_time->getDurationInUse() % 60L) == 30L) {
+      // ... suivi de la Taille...
+      g__sdcard->printSizeFile();
+    }
+    else if ((g__date_time->getDurationInUse() % 60L) == 45L) {
+      // ... suivi du Nombre d'erreurs.
+      g__sdcard->printNbrErrors();
+    }
+  }
+}
+
 void loop()
 {
   if (g__flg_expired_1ms == true) {
@@ -812,7 +871,6 @@ void loop()
     // Duree de fonctionnement
     g__date_time->incDurationInUse();
 
-#if 1   //USE_SIMULATION
     // Derive @ l'epoch 'Hard' considere comme la reference temporelle ;-)
     g__duration_diff = (g__date_time->getDurationInUse() - g__date_time->getEpochDiff());
 
@@ -821,16 +879,37 @@ void loop()
           compte tenue de la lecture ici ;-)
           => Le retour de 'g__date_time->getDurationInUse()' est toujours incremente de +1 ici ;-))
     */
-    if ((g__date_time->getDurationInUse() % 60L) == 0) {
-      Serial.printf("#1: Epoch Start [%lu] (+%lu) Derive (%c%lu) Current [%lu] -> [%lu] Sec (%02uh%02u'%02u\" GMT+%d)\n",
-        g__date_time->getEpochStart(), g__date_time->getEpochDiff(),
+    //if ((g__date_time->getDurationInUse() % 60L) == 0) {
+      Serial.printf("#1: Epoch Start [%lu] Epoch [%lu] (+%lu) Derive (%c%lu) Current [%lu] -> [%lu] Sec (%02uh%02u'%02u\" GMT+%d)\n",
+        g__date_time->getEpochStart(), g__date_time->getEpoch(), g__date_time->getEpochDiff(),
         (g__duration_diff < 0 ? '-' : '+'), (g__duration_diff < 0 ? -g__duration_diff : g__duration_diff),
         g__date_time->getRtcSecInDayGmt(), g__date_time->getRtcSecInDayLocal(),
         (unsigned int)(g__date_time->getRtcSecInDayLocal() / 3600L),           // Heures
         (unsigned int)((g__date_time->getRtcSecInDayLocal() % 3600L) / 60L),   // Minutes
         (unsigned int)((g__date_time->getRtcSecInDayLocal() % 3600L) % 60L),   // Secondes
         g__date_time->getRtcSecInDayOffset());
+
+    // Construction du fichier d'enregistrement en remplacement de celui non date
+#if 0
+    {
+      struct tm timeinfo = g__rtc->getTimeStruct();
+
+	    Serial.printf("File record name [%04d%02d%02d-%02d%02d GMT+%d]\n",
+		    (1900 + timeinfo.tm_year), (timeinfo.tm_mon + 1), timeinfo.tm_mday,
+		    timeinfo.tm_hour, timeinfo.tm_min,
+        g__date_time->getRtcSecInDayOffset());
+
+#if USE_SIMULATION
+      printf("File record name [%s%04u%02u%02u-%02u%02u-GMT+%d.txt]\n",
+        UNDATED_FILE_PATTERN_YEARS,
+        (1900 + timeinfo.tm_year), (timeinfo.tm_mon + 1), timeinfo.tm_mday,
+		    timeinfo.tm_hour, timeinfo.tm_min,
+        g__date_time->getRtcSecInDayOffset());
+#endif
+      // Fin: Construction du fichier d'enregistrement en remplacement de celui non date
     }
+#endif
+    //}
     // Fin: Traces de gestion des temps (1 fois toutes les minutes)...
 
     /* Calcul de la plage [begin, ..., end] correspondant au debut et a la fin la periode @ definition
@@ -845,17 +924,32 @@ void loop()
       (g__date_time->isRtcSecInDayInRange() == true) ? "In the range" : "Out of the range");
     // Fin: Gestion du nombres de secondes depuis 00h00'00" a partir du RTC
 #endif
-#endif
 
     if (g__config_rtc->isInProgress() == false) {
       char l__text_for_lcd[32];
       memset(l__text_for_lcd, '\0', sizeof(l__text_for_lcd));
 
+      char l__text_for_file_record[32];
+      memset(l__text_for_file_record, '\0', sizeof(l__text_for_file_record));
+
       long l__epoch = g__rtc->getEpoch();
 
       if (g__date_time->isRtcInit()) {
-        g__date_time->getRtcTimeForLcd(l__text_for_lcd);
+        String l__str_for_file_record = FILE_PATTERN_YEARS;
+
+        g__date_time->getRtcTimeForLcd(l__text_for_lcd, l__text_for_file_record);
         g__gestion_lcd->Paint_DrawString_EN(6, 8, l__text_for_lcd, &Font16, BLACK, GREEN);
+
+        //if ((g__date_time->getDurationInUse() % 60L) == 0) {
+          // Name of file record...
+          l__str_for_file_record.concat(l__text_for_file_record);
+          l__str_for_file_record.concat(".txt");
+
+#if USE_SIMULATION
+          printf("File Record [%s]\n", l__str_for_file_record.c_str());
+#endif
+          g__sdcard->addNewFileRecordName(l__str_for_file_record.c_str());
+        //}
 
 #if 0
         g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_YELLOW_X, LIGHTS_POSITION_Y,
@@ -863,8 +957,21 @@ void loop()
 #endif
       }
       else {
-        g__date_time->formatDuration(l__text_for_lcd, l__epoch);
+        String l__str_for_file_record = FILE_PATTERN_YEARS;
+
+        g__date_time->formatDuration(l__text_for_lcd, l__epoch, l__text_for_file_record);
         g__gestion_lcd->Paint_DrawString_EN(6 + (11 * 11), 8, l__text_for_lcd, &Font16, BLACK, GREEN);
+
+        //if ((g__date_time->getDurationInUse() % 60L) == 0) {
+          // Name of file record...
+          l__str_for_file_record.concat(l__text_for_file_record);
+          l__str_for_file_record.concat(".txt");
+
+#if USE_SIMULATION
+          printf("File Record [%s]\n", l__str_for_file_record.c_str());
+#endif
+          g__sdcard->addNewFileRecordName(l__str_for_file_record.c_str());
+        //}
 
 #if 0
         g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_YELLOW_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, YELLOW);
@@ -875,35 +982,8 @@ void loop()
     // Read and presentation of the electric power
     readAndDrawElectricPower(g__analog_read_1, 29);
 
-    /* Datation, maj et Ecriture de la trame d'enregistrement toutes les xx minutes...
-    */
-    if ((g__date_time->getDurationInUse() % (60L)) == 0) {
-      // Emission et reinitialisation de la trame d'enregistement
-      if (g__analog_read_1->isFrameRecordingInUse() == true) {
-        g__analog_read_1->writeFrameRecording();
-      }
-
-      char l__hhmmss[32];
-      memset(l__hhmmss, '\0', sizeof(l__hhmmss));
-
-      sprintf(l__hhmmss, "%02u:%02u:%02u",
-        (unsigned int)(g__date_time->getRtcSecInDayLocal() / 3600L),            // Heures
-        (unsigned int)((g__date_time->getRtcSecInDayLocal() % 3600L) / 60L),    // Minutes
-        (unsigned int)((g__date_time->getRtcSecInDayLocal() % 3600L) % 60L));   // Secondes
-
-      if (g__config_rtc->isDone() == true) {
-        // Ajout du fuseau horaire si le RTC est configure
-        sprintf(&l__hhmmss[strlen(l__hhmmss)], " GMT+%d",
-          g__date_time->getRtcSecInDayOffset());                                // Fuseau horaire
-      }
-
-      g__analog_read_1->buildFrameRecording(l__hhmmss);
-    }
-  
-    if (g__analog_read_1->isFrameRecordingInUse() == true) {
-      g__analog_read_1->buildFrameRecording();
-    }
-    // Fin: Datation, maj et Ecriture de la trame d'enregistrement toutes les xx minutes...
+    // Datation, maj et Ecriture de la trame d'enregistrement
+    gestionFrameRecording();
 
     // Affichage des courbes min, moyenne et max horodatees
     g__gestion_lcd->Paint_UpdateLcdFromScreenVirtual();
@@ -1029,7 +1109,7 @@ void execCommandRTC(char *i__copy_incomming_buff)
       //timeinfo.tm_isdst = 0;    // Maj si Heure d'hiver
 
 			g__rtc->setTimeStruct(timeinfo);
-			g__date_time->setRtcInit();
+			//g__date_time->setRtcInit();     // TODO: Semble inutile ;-)
 		}
 		else {
 			Serial.printf("Unknown sub-command [%s]\n", l__pattern);
@@ -1064,12 +1144,16 @@ void execCommandRTC(char *i__copy_incomming_buff)
 			char l__text_for_lcd[32];
 			memset(l__text_for_lcd, '\0', sizeof(l__text_for_lcd));
 
+			char l__text_for_file_record[32];
+			memset(l__text_for_file_record, '\0', sizeof(l__text_for_file_record));
+
 			sprintf(l__date, "%02u%02u%02u", timeinfo.tm_mday, (timeinfo.tm_mon + 1), ((1900 + timeinfo.tm_year) % 100));
 			sprintf(l__time, "%02d%02d%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
 
-			g__date_time->buildGpsDateTime(l__date, l__time, l__date_time, &l__dateAndTime, l__text_for_lcd);
+			g__date_time->buildGpsDateTime(l__date, l__time, l__date_time, &l__dateAndTime, l__text_for_lcd, l__text_for_file_record);
 
-			Serial.printf("   LCD [%s]\n", l__text_for_lcd);
+			Serial.printf("   LCD         [%s]\n", l__text_for_lcd);
+			Serial.printf("   File Record [%s]\n", l__text_for_file_record);
 		}
 		else {
 			Serial.printf("   RTC not initialized\n");

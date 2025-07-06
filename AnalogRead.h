@@ -1,4 +1,4 @@
-// $Id: AnalogRead.h,v 1.20 2025/06/14 14:09:22 administrateur Exp $
+// $Id: AnalogRead.h,v 1.21 2025/06/15 17:01:07 administrateur Exp $
 
 #ifndef __ANALOG_READ__
 #define __ANALOG_READ__
@@ -72,9 +72,10 @@ typedef struct {
 } ST_CONSOMMATION_WATTS_HOUR;
 
 typedef struct {
-  bool                          flg_in_use;
-  String                        hhmmss;
-  unsigned int                  nbr_values;
+  bool                          flg_in_use;   // Flag de construction/ecriture de l'enregistrement
+  uint16_t                      nbr_records;  // Nombre d'enregistrements hors commentaires
+  String                        hhmmss;       // HH:MM:SS ou HH:MM:SS GMT+h
+  unsigned int                  nbr_values;   // Nombre des valeurs suivantes
   String                        values;
 } ST_FRAME_RECORDING;
 

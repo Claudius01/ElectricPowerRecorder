@@ -1,4 +1,4 @@
-// $Id: SDCard.h,v 1.4 2025/06/13 15:32:46 administrateur Exp $
+// $Id: SDCard.h,v 1.10 2025/07/06 15:58:06 administrateur Exp $
 
 #ifndef __SDCARD__
 #define __SDCARD__
@@ -29,12 +29,26 @@
 #define SPI1_SS   34
 #endif
 
-#define UNDATED_FILE_PATTERN_YEARS    "EPower-"                     // Debut du fichier (pointage sur 'Year')
-#define UNDATED_FILE_PATTERN_MONTHS   "EPower-0000"                 // Suite (pointage sur 'Month')
-#define UNDATED_FILE_PATTERN          "EPower-00000000-0000.txt"    // Forme complete et nommage du 1st fichier
+#define FILE_PATTERN_YEARS            "EPower-"                     // Debut du fichier (pointage sur 'Year')
+#define FILE_PATTERN_MONTHS           "EPower-0000"                 // Suite (pointage sur 'Month')
+#define FILE_PATTERN                  "EPower-00000000-0000.txt"    // Forme complete et nommage du 1st fichier
 #define FRAMES_DIRECTORY              "/EPOWER/"                    // Repertoire des fichiers d'enregistrements (dates et non dates)
 
+#define TEXT_POSITION_PROPERTIES_X    180
+#define TEXT_POSITION_PROPERTIES_Y    117
+#define TEXT_LENGTH_PROPERTIES         10     // Longueur des proprietes
+
 //#define NAME_OF_FILE_GPS_FRAMES       "/FRAME/GpsFrames.txt"
+
+// Proprietes des fichiers d'enregistrement en cours
+typedef struct {
+  size_t      test_size_pre;
+  size_t      test_frame_size;
+
+  size_t      frame_size;
+  uint16_t    frame_nbr_records;
+  uint16_t    frame_nbr_errors;
+} ST_FILE_PROPERTIES;
 
 #if !USE_SIMULATION
 class SDCard
@@ -51,10 +65,20 @@ class SDCard : public SD
     bool        flg_sdcard_in_use;
     bool        flg_inh_append_gps_frame;
 
-    size_t      gps_frame_size;
-    uint16_t    gps_frame_nbr_records;
+    int         m__index_filename_not_dated;      // Index des fichiers non dates
 
+    ST_FILE_PROPERTIES    m__file_properties;
+
+    /* Nom du fichier d'enregistrement en cours
+       => Celui-ci est change suite:
+          - Au passage a minuit avec changement du jour (fichier date et non date)
+          - A la configuration du RTC
+            => Chgt d'un fichier non date a un fichier date
+    */
     String      m__filename_frames;
+
+    // Liste des fichiers d'enregistrements utilises depuis le lancement ;-)
+    std::vector<String>    m__file_record_name;
 
     bool preparing();
 
@@ -84,13 +108,13 @@ class SDCard : public SD
 
     bool appendGpsFrame(const char *i__frame, boolean i__flg_force_append = false);
     bool appendGpsFrame(const String &i__frame, boolean i__flg_force_append = false) { return appendGpsFrame(i__frame.c_str()); };
-    size_t getGpsFrameSize() const { return gps_frame_size; };
+    size_t getGpsFrameSize() const { return m__file_properties.frame_size; };
 
     void formatSize(size_t i__value, char *o__buffer) const ;
-    void formatNbrRecords(char *o__buffer) const { sprintf(o__buffer, "#%u", gps_frame_nbr_records); };
+    void formatValue(uint16_t i__value, char *o__buffer) const { sprintf(o__buffer, "#%u", i__value); };
   
     size_t sizeFile(const char *i__file_name);
-    uint16_t getNbrRecords() const { return gps_frame_nbr_records; };
+    uint16_t getNbrRecords() const { return m__file_properties.frame_nbr_records; };
 
     // Methods for tests
     bool printInfos();   
@@ -103,6 +127,15 @@ class SDCard : public SD
     bool renameFile(const char *i__path_from, const char *i__path_to);
     bool deleteFile(const char *i__path);
     // End: Methods for tests
+
+    void printNameFile();
+    void printSizeFile();
+    void printNbrRecords();
+    void printNbrErrors();
+
+    void resetFileProperties();
+    int  getIndexOfFileNameNotDated() const { return m__index_filename_not_dated; };
+    void addNewFileRecordName(const char *i__value);
 };
 
 extern void callback_end_sdcard_acces();

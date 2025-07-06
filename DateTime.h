@@ -1,4 +1,4 @@
-// $Id: DateTime.h,v 1.6 2025/06/04 15:20:47 administrateur Exp $
+// $Id: DateTime.h,v 1.8 2025/06/27 16:55:21 administrateur Exp $
 
 #ifndef __DATE_TIME__
 #define __DATE_TIME__
@@ -118,7 +118,8 @@ class DateTime {
     void setRtcInit() { flg_rtc_init = true; };
     bool isRtcInit() { return flg_rtc_init; };
   
-		long buildGpsDateTime(const char i__date[], const char i__time[], char *o_date_time, ST_DATE_AND_TIME *o__dateAndTime, char *o__text_for_lcd = NULL);
+		long buildGpsDateTime(const char i__date[], const char i__time[], char *o_date_time, ST_DATE_AND_TIME *o__dateAndTime,
+      char *o__text_for_lcd = NULL, char *o__text_for_file_record = NULL);
 
     long getEpochStart() const { return epoch_start; };
     void setEpochStart(long i__value) { epoch_start = i__value; };
@@ -130,7 +131,7 @@ class DateTime {
 
     void incDurationDeconnexion() { duration_deconnexion++; };
     long getDurationDeconnexion() const { return duration_deconnexion; };
-    void formatDuration(char *o__buffer, long i__value) const;
+    void formatDuration(char *o__buffer, long i__value, char *o__text_for_file_record = NULL) const;
     void formatDurationDeconnexion(char *o__buffer) const;
 
     void          setRtcSecInDayGmt();
@@ -139,7 +140,7 @@ class DateTime {
     unsigned int  getRtcSecInDayOffset() const { return epoch_rtc_offset; };
     ENUM_IN_THE_PERIOD isRtcSecInDayInRange() const;
  
-    void getRtcTimeForLcd(char *o__text_for_lcd);
+    void getRtcTimeForLcd(char *o__text_for_lcd, char *o__text_for_file_record);
 
     void          setDurationInUse(unsigned long i__value) { duration_in_use = i__value; };
     unsigned long getDurationInUse() const { return duration_in_use; };

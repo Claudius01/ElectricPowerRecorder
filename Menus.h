@@ -1,9 +1,9 @@
-// $Id: Menus.h,v 1.14 2025/06/13 15:32:46 administrateur Exp $
+// $Id: Menus.h,v 1.15 2025/06/15 17:01:07 administrateur Exp $
 
 #ifndef __MENUS__
 #define __MENUS__
 
-#define TEXT_POSITION_MENU_X     192
+#define TEXT_POSITION_MENU_X     180
 #define TEXT_POSITION_MENU_Y     117
 
 typedef enum {
@@ -89,6 +89,8 @@ class Menus {
 	public:
 		Menus();
 		~Menus();
+
+    bool getFlgMenu() const { return m__flg_menu; };
 
     ENUM_MENU_IN_PROGRESS getMenuInProgress() const { return m__menu_in_progress; };
 

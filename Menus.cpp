@@ -1,4 +1,4 @@
-// $Id: Menus.cpp,v 1.24 2025/06/13 15:32:46 administrateur Exp $
+// $Id: Menus.cpp,v 1.25 2025/06/15 17:01:07 administrateur Exp $
 
 #if USE_SIMULATION
 #include "ArduinoTypes.h"
@@ -26,14 +26,16 @@
 
 /* Libelles pour les traces et l'ecran LCD
    => Deroulement des menus
+
+   => Padding a blanc pour effacer les proprietes (cf. 'TEXT_LENGTH_PROPERTIES = 10 caracteres')
  */
 static const char *g__menu_label_menu[MENU_NBR] = {
-  "RTC    ",
-  "SDCard ",
-  "Min/Max",
-  "Periods",
-  "Unites ",
-  "Exit   "
+  "RTC       ",
+  "SDCard    ",
+  "Min/Max   ",
+  "Periods   ",
+  "Unites    ",
+  "Exit      "
 };
 
 /* Libelles pour les periodes

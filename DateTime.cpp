@@ -1,4 +1,4 @@
-// $Id: DateTime.cpp,v 1.9 2025/06/02 17:32:37 administrateur Exp $
+// $Id: DateTime.cpp,v 1.14 2025/07/05 17:04:41 administrateur Exp $
 
 #if USE_SIMULATION
 #include <cstdio>
@@ -7,7 +7,11 @@
 #include "Arduino.h"
 
 #include "Serial.h"
+#include "String.h"
+
 #include "traces.hpp"
+
+#include "SDCardSimu.h"
 #else
 #include <Arduino.h>
 #endif
@@ -17,6 +21,7 @@
 #include "GestionLCD.h"
 #include "AnalogRead.h"
 #include "DateTime.h"
+#include "SDCard.h"
 
 static byte                 g__monthDays[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 
@@ -43,7 +48,8 @@ static ST_FOR_SOMMER_TIME_CHANGE   g__st_for_sommer_time_change = {
   }
 };
 
-DateTime::DateTime() : flg_rtc_init(false), epoch_start(0L),epoch(0), epoch_diff(0L), duration_deconnexion(0L),
+DateTime::DateTime() : flg_rtc_init(false), epoch_start(0L), epoch(0), epoch_diff(0L),
+                       duration_deconnexion(0L),
                        epoch_rtc_gmt(0L), epoch_rtc_offset(0), duration_in_use(0L)
 {
 	Serial.println("DateTime::DateTime()");
@@ -111,7 +117,7 @@ long DateTime::calculatedEpochTime(ST_DATE_AND_TIME *i__st_date_and_time)
 }
 
 // TODO: Add test of all fields
-long DateTime::buildGpsDateTime(const char i__date[], const char i__time[], char *o_date_time, ST_DATE_AND_TIME *o__dateAndTime, char *o__text_for_lcd)
+long DateTime::buildGpsDateTime(const char i__date[], const char i__time[], char *o_date_time, ST_DATE_AND_TIME *o__dateAndTime, char *o__text_for_lcd, char *o__text_for_file_record)
 {
 	ST_DATE_AND_TIME l__dateAndTime;
 	memset(&l__dateAndTime, '\0', sizeof(ST_DATE_AND_TIME));
@@ -183,23 +189,42 @@ long DateTime::buildGpsDateTime(const char i__date[], const char i__time[], char
     g__st_for_sommer_time_change.st_days_in_week[(int)l__dateAndTime_presentation.day_of_week].name,
     l__sommer_winter);
 
+  char l__day_of_week[3 + 1];
+  memset(l__day_of_week, '\0', sizeof(l__day_of_week));
+
+  strncpy(l__day_of_week, g__st_for_sommer_time_change.st_days_in_week[(int)l__dateAndTime_presentation.day_of_week].name, 3);
+
   /* Presentation pour LCD
                   1          2         3
           123456789012345678901234567890
      ie. "Ven. 31/01/25 18:35" 
   */
   if (o__text_for_lcd != NULL) {
-    char l__day_of_week[3 + 1];
-    memset(l__day_of_week, '\0', sizeof(l__day_of_week));
-
-    strncpy(l__day_of_week, g__st_for_sommer_time_change.st_days_in_week[(int)l__dateAndTime_presentation.day_of_week].name, 3);
-
     sprintf(o__text_for_lcd, "%s. %02d/%02d/%04d %02d:%02d",
       l__day_of_week,
       l__dateAndTime_presentation.day, l__dateAndTime_presentation.month, (2000 + l__dateAndTime_presentation.year),
       l__dateAndTime_presentation.hours, l__dateAndTime_presentation.minutes);
   }
-  // Presentation pour LCD
+  // Fin: Presentation pour LCD
+
+  // Presentation pour le nommage des fichiers d'enregistrement
+  /* Format des fichiers dates "-YYYYMMDD-HHMM-GMT+h" avec:
+      - "YYYY"  l'annee
+      - "MM"    le mois
+      - "DD"    le jour
+      - "HHMM"  l'heure et la minute actuelle
+      - "GMT+h" Heure locale par rapport a l'heure GMT
+                => En France: heure d'ete -> GMT+2 et heure d'hiver -> GMT+1
+
+     => 'l__day_of_week' numero de jour dans la semaine nin utilise
+  */
+  if (o__text_for_file_record != NULL) {
+    sprintf(o__text_for_file_record, "%04d%02d%02d-%02d%02d-GMT+%d",
+      (2000 + l__dateAndTime_presentation.year), l__dateAndTime_presentation.month, l__dateAndTime_presentation.day,
+      l__dateAndTime_presentation.hours, l__dateAndTime_presentation.minutes,
+      (o__dateAndTime->sommer_winter == SOMMER) ? 2 : 1);
+  }
+  // Fin: Presentation pour le nommage des fichiers d'enregistrement
 
 	return l__epoch;
 }
@@ -495,7 +520,7 @@ void DateTime::formatDurationDeconnexion(char *o__buffer) const
    - __1J 00:00 ... 99J 23:59
    - >99J HH:MM ...
 */
-void DateTime::formatDuration(char *o__buffer, long i__value) const
+void DateTime::formatDuration(char *o__buffer, long i__value, char *o__text_for_file_record) const
 {
   if (i__value < 3600L) {
     // Formatage comme "MM'SS" si 'i__value' < 1 Heure
@@ -515,6 +540,16 @@ void DateTime::formatDuration(char *o__buffer, long i__value) const
     sprintf(o__buffer, ">99J %02lu:%02lu",
       (i__value % (24L * 3600L) / 3600L), (i__value % 3600L) / 60L);
   }
+
+  if (o__text_for_file_record != NULL) {
+    /* Format des fichiers non dates "-XXXX00DD-HHMM" avec:
+       - "XXXX" l'index determine au lancement
+       - "DD"   le nombre de jours de fonctionnement depuis le lancement
+       - "HHMM" l'heure et la minute actuelle
+    */
+    sprintf(o__text_for_file_record, "%04u00%02ld-%02lu%02lu", g__sdcard->getIndexOfFileNameNotDated(),
+      (i__value / (24L * 3600L)), (i__value % (24L * 3600L) / 3600L), (i__value % 3600L) / 60L);
+  }
 }
 
 void DateTime::setRtcSecInDayGmt()
@@ -527,12 +562,16 @@ void DateTime::setRtcSecInDayGmt()
     // Trace des Heures/Minutes @ 86400 Sec / Jour
 #if 0
     unsigned int l__offset = (epoch_rtc_offset * 3600);
-    unsigned long l__epoch_rtc_local = ((epoch_rtc_gmt + l__offset) % 86400L);
 
-    Serial.printf("#2: Epoch [%lu] -> [%lu] Sec (%02uh%02u'%02u\" GMT+%d)\n", getRtcSecInDayGmt(), getRtcSecInDayLocal(),
-      (unsigned int)(l__epoch_rtc_local / 3600L),                               // Heures
-      (unsigned int)((l__epoch_rtc_local % 3600L) / 60L),                       // Minutes
-      (unsigned int)((l__epoch_rtc_local % 3600L) % 60L),   // Secondes
+    /* Determination du passage a 1J supplementaire (cf. '(unsigned int)((epoch_rtc_gmt + l__offset) / 86400L)' ;-)
+       => Nommage des fichiers d'enregistrement...
+    */
+    Serial.printf("#2: Epoch [%lu] -> [%lu] Sec (%uJ %02uh%02u'%02u\" GMT+%d)\n",
+      getRtcSecInDayGmt(), getRtcSecInDayLocal(),
+      (unsigned int)((epoch_rtc_gmt + l__offset) / 86400L),                     // Days
+      (unsigned int)(((epoch_rtc_gmt + l__offset) % 86400L) / 3600L),           // Heures
+      (unsigned int)((((epoch_rtc_gmt + l__offset) % 86400L) % 3600L) / 60L),   // Minutes
+      (unsigned int)((((epoch_rtc_gmt + l__offset) % 86400L) % 3600L) % 60L),   // Secondes
       epoch_rtc_offset);
 #endif
   }
@@ -609,7 +648,7 @@ ENUM_IN_THE_PERIOD DateTime::isRtcSecInDayInRange() const
   return l__period_rtn;
 }
 
-void DateTime::getRtcTimeForLcd(char *o__text_for_lcd)
+void DateTime::getRtcTimeForLcd(char *o__text_for_lcd, char *o__text_for_file_record)
 {
 #if 1       // #if !USE_SIMULATION
   struct tm timeinfo = g__rtc->getTimeStruct();
@@ -639,5 +678,5 @@ void DateTime::getRtcTimeForLcd(char *o__text_for_lcd)
   sprintf(l__date, "%02u%02u%02u", timeinfo.tm_mday, (timeinfo.tm_mon + 1), ((1900 + timeinfo.tm_year) % 100));
   sprintf(l__time, "%02d%02d%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
 
-  g__date_time->buildGpsDateTime(l__date, l__time, l__date_time, &l__dateAndTime, o__text_for_lcd);
+  g__date_time->buildGpsDateTime(l__date, l__time, l__date_time, &l__dateAndTime, o__text_for_lcd, o__text_for_file_record);
 }

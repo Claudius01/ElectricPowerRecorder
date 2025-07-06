@@ -1,4 +1,4 @@
-// $Id: AnalogRead.cpp,v 1.36 2025/06/14 15:32:55 administrateur Exp $
+// $Id: AnalogRead.cpp,v 1.37 2025/06/15 17:01:07 administrateur Exp $
 
 #if USE_SIMULATION
 #include "ArduinoTypes.h"
@@ -512,12 +512,30 @@ void AnalogRead::drawConsommations(UWORD i__y)
   g__gestion_lcd->Paint_DrawString_EN(2  + (11 * 12), i__y, l__text_for_lcd, &Font16, BLACK, YELLOW);
 }
 
+/* Methodes de gestion du buffer d'enregistrement qui sera ecrit sur la SDCard
+   => #Commentaires + Codage CSV
+
+19:14:56.033 -> #File [EPower-01100000-0000.txt]
+19:14:56.033 -> #Start Recording
+19:14:56.033 -> [00:01:00;60;395;375;356;375;393;342;387;352;372;359;350;409;342;387;398;365;359;404;391;366;364;404;385;364;351;396;413;358;370;395;383;343;416;363;352;389;380;350;341;352;488;366;321;396;481;310;422;400;323;489;489;297;466;428;495;476;294;323;372;450]
+19:14:56.033 -> [00:02:00;60;296;482;372;422;363;377;437;393;350;409;393;413;353;380;393;372;361;375;366;407;351;387;404;413;344;352;353;391;377;361;345;420;470;395;357;383;386;354;376;409;338;302;464;295;474;400;341;389;480;503;489;297;481;393;333;397;482;501;489;296]
+19:14:56.033 -> [00:03:00;60;470;361;307;435;451;496;471;288;489;387;330;386;467;490;496;320;404;483;437;294;352;438;426;410;314;497;494;306;294;329;372;462;311;463;452;385;324;307;359;366;462;299;294;489;501;491;437;294;496;336;296;452;480;496;440;299;491;323;296;476]
+...
+*/
 void AnalogRead::initFrameRecording()
 {
-  m__frame_recording.flg_in_use = false;
-  m__frame_recording.hhmmss     = "";
-  m__frame_recording.nbr_values = 0;
-  m__frame_recording.values     = "";
+  m__frame_recording.flg_in_use  = false;
+  m__frame_recording.nbr_records = 0;
+  m__frame_recording.hhmmss      = "";
+  m__frame_recording.nbr_values  = 0;
+  m__frame_recording.values      = "";
+}
+
+void AnalogRead::buildFrameRecording(const char *i__text)
+{
+  m__frame_recording.hhmmss = i__text;
+
+  m__frame_recording.flg_in_use = true;
 }
 
 void AnalogRead::buildFrameRecording()
@@ -532,27 +550,22 @@ void AnalogRead::buildFrameRecording()
   m__frame_recording.values.concat(l__value);
 }
 
-void AnalogRead::buildFrameRecording(const char *i__text)
-{
-  m__frame_recording.hhmmss = i__text;
-
-  m__frame_recording.flg_in_use = true;
-}
-
 // Formatage au format CSV
 void AnalogRead::writeFrameRecording()
 {
   String l__buffer = "[";
+
+  // HH:MM:SS
   l__buffer.concat(m__frame_recording.hhmmss.c_str());
 
+  // Nbr de valeurs
   char l__value[32];
   memset(l__value, '\0', sizeof(l__value));
   sprintf(l__value, ";%u", m__frame_recording.nbr_values);
-
   l__buffer.concat(l__value);
 
+  // Liste des valeurs
   l__buffer.concat(m__frame_recording.values.c_str());
-
   l__buffer.concat("]\n");
 
   Serial.printf("%s(): Write Frame Recording %s", __FUNCTION__, l__buffer.c_str());
@@ -561,7 +574,12 @@ void AnalogRead::writeFrameRecording()
   printf("%s", l__buffer.c_str());
 #endif
 
+  if (g__sdcard->getInhAppendGpsFrame() == false) {
+    m__frame_recording.nbr_records++;
+  }
+
   g__sdcard->appendGpsFrame(l__buffer);
 
   initFrameRecording();
 }
+// Fin:  Methodes de gestion du buffer d'enregistrement qui sera ecrit sur la SDCard
