@@ -1,4 +1,4 @@
-// $Id: Timers.h,v 1.10 2025/06/03 15:40:57 administrateur Exp $
+// $Id: Timers.h,v 1.12 2025/07/12 16:40:52 administrateur Exp $
 
 #ifndef __TIMERS__
 #define __TIMERS__
@@ -8,17 +8,12 @@
    => 100L correspond a 100 * 10mS = 1Sec
 */
 constexpr long DURATION_TIMER_CHENILLARD        = 12L;          // 120mS
-constexpr long DURATION_TIMER_CONNECT           = 10 * 100L;    // 10" before state 'NOT_CONNECTED'
 
 constexpr long DURATION_TIMER_SDCARD_ACCES      = 100L;         // 1"
 constexpr long DURATION_TIMER_SDCARD_ERROR      = 100L;         // 1"
 constexpr long DURATION_TIMER_SDCARD_RETRY_INIT = 200L;         // 2" 
 constexpr long DURATION_TIMER_SDCARD_INIT_ERROR = 100L;         // 1"
 
-constexpr long DURATION_TIMER_NMEA_ACTIVITY = 100L;             // 1"
-constexpr long DURATION_TIMER_NMEA_ERROR = 100L;                // 1"
-
-constexpr long DURATION_TIMER_SEND_GPSPILOT = 25L;              // 250mS
 constexpr long DURATION_TIMER_ACTIVATE_SDCARD = 100L;           // 1"
 
 constexpr long DURATION_TIMER_WATCHDOG = 100L;  		            // 1"
@@ -31,17 +26,12 @@ constexpr long  DURATION_TIMER_MENU_WAIT_ACQ = 300;             // 3"
 constexpr long  DURATION_TIMER_CONSO_FLASH = 20;                // 200mS
 #else
 #define DURATION_TIMER_CHENILLARD          12L          // 120mS
-#define DURATION_TIMER_CONNECT             10 * 100L    // 10" before state 'NOT_CONNECTED'
 
 #define DURATION_TIMER_SDCARD_ACCES        100L         // 1"
 #define DURATION_TIMER_SDCARD_ERROR        100L         // 1"
 #define DURATION_TIMER_SDCARD_RETRY_INIT   200L         // 2" 
 #define DURATION_TIMER_SDCARD_INIT_ERROR   100L         // 1"
 
-#define DURATION_TIMER_NMEA_ACTIVITY   100L             // 1"
-#define DURATION_TIMER_NMEA_ERROR   100L                // 1"
-
-#define DURATION_TIMER_SEND_GPSPILOT   25L              // 250mS
 #define DURATION_TIMER_ACTIVATE_SDCARD   100L           // 1"
 
 #define DURATION_TIMER_WATCHDOG   100L 	 		            // 1"
@@ -56,23 +46,15 @@ constexpr long  DURATION_TIMER_CONSO_FLASH = 20;                // 200mS
 
 typedef enum {
   TIMER_CHENILLARD = 0,         // Presentation sur la Led
+
+#if 0
   TIMER_CONNECT,                // Gestion etats "connecte/non connecte"
+#endif
 
   TIMER_SDCARD_ACCES,           // Timer pour l'acces a la SD Card (allumage d'une duree minimun de 'DURATION_TIMER_SDCARD_ACCES')
   TIMER_SDCARD_ERROR,           // Timer pour la presentation de l'erreur d'acces a la SD Card (allumage d'une duree minimun de 'DURATION_TIMER_SDCARD_ERROR')
   TIMER_SDCARD_RETRY_INIT,      // Timer pour les tentatives d'initialisation
   TIMER_SDCARD_INIT_ERROR,      // Timer pour la presentation de l'erreur d'initialisation
-
-  TIMER_NMEA_ACTIVITY,          // Timer pour la presentation de l'emission TLV
-  TIMER_NMEA_ERROR,             // Timer pour la presentation des erreurs de reception NMEA
-
-  TIMER_SEND_GPSPILOT,          // Timer pour le cadencement ligne a ligne de 'GpsPilot.txt'
-  TIMER_ACTIVATE_SDCARD,        // Timer pour l'activation de la SDCard apres l'emission de 'GpsPilot.txt'
-
-#if 0
-  TIMER_CONFIG_RTC_SCROLLING,   // Timer pour le defilement des valeurs de configuration RTC a acquerir
-  TIMER_CONFIG_RTC_WAIT_ACQ,    // Timer pour l'attente de fin d'acquisition des valeurs de configuration RTC a acquerir
-#endif
 
   TIMER_ANALOG_ACQ,             // Timer de presentation des acquisitions analogiques
 

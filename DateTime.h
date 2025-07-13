@@ -1,4 +1,4 @@
-// $Id: DateTime.h,v 1.8 2025/06/27 16:55:21 administrateur Exp $
+// $Id: DateTime.h,v 1.9 2025/07/13 14:14:03 administrateur Exp $
 
 #ifndef __DATE_TIME__
 #define __DATE_TIME__
@@ -118,7 +118,7 @@ class DateTime {
     void setRtcInit() { flg_rtc_init = true; };
     bool isRtcInit() { return flg_rtc_init; };
   
-		long buildGpsDateTime(const char i__date[], const char i__time[], char *o_date_time, ST_DATE_AND_TIME *o__dateAndTime,
+		long buildEPowerDateTime(const char i__date[], const char i__time[], char *o_date_time, ST_DATE_AND_TIME *o__dateAndTime,
       char *o__text_for_lcd = NULL, char *o__text_for_file_record = NULL);
 
     long getEpochStart() const { return epoch_start; };

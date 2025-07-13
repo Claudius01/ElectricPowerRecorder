@@ -1,4 +1,4 @@
-// $Id: AnalogRead.cpp,v 1.37 2025/06/15 17:01:07 administrateur Exp $
+// $Id: AnalogRead.cpp,v 1.40 2025/07/13 14:14:03 administrateur Exp $
 
 #if USE_SIMULATION
 #include "ArduinoTypes.h"
@@ -64,7 +64,7 @@ void callback_conso_period()
     }
   }
   else {
-    g__gestion_lcd->Paint_DrawSymbol(225, 27, LIGHT_BORD_IDX, &Font16Symbols, BLACK, WHITE);
+    g__gestion_lcd->Paint_DrawSymbol(225, 27, LIGHT_BORD_IDX, &Font16Symbols, BLACK, YELLOW);
   }
 }
 
@@ -229,7 +229,7 @@ bool AnalogRead::readValue()
 #endif
     }
 
-    // Forcage rearment timer si 20% superieurs de la valeur precedente
+    // Forcage rearmement timer si les 'Wh' sont superieurs de 20% de la valeur precedente
     if (l__conso_watts_hour > (1.2 * m__conso_watts_hour.current_hour_previous)) {
       if (g__timers->isInUse(TIMER_CONSO_PERIOD) == true) {
         g__timers->stop(TIMER_CONSO_PERIOD);
@@ -574,11 +574,11 @@ void AnalogRead::writeFrameRecording()
   printf("%s", l__buffer.c_str());
 #endif
 
-  if (g__sdcard->getInhAppendGpsFrame() == false) {
+  if (g__sdcard->getInhAppendEPowerFrame() == false) {
     m__frame_recording.nbr_records++;
   }
 
-  g__sdcard->appendGpsFrame(l__buffer);
+  g__sdcard->appendEPowerFrame(l__buffer);
 
   initFrameRecording();
 }

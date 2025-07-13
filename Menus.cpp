@@ -1,4 +1,4 @@
-// $Id: Menus.cpp,v 1.25 2025/06/15 17:01:07 administrateur Exp $
+// $Id: Menus.cpp,v 1.26 2025/07/13 14:14:03 administrateur Exp $
 
 #if USE_SIMULATION
 #include "ArduinoTypes.h"
@@ -121,21 +121,21 @@ void callback_menu_end_wait_acq()
 {
   switch (g__menus->getMenuInProgress()) {
   case MENU_SDCARD_IN_PROGRESS:
-    if (g__sdcard->getInhAppendGpsFrame() == false) {
-      /* Le flag 'flg_inh_append_gps_frame' sera maj a 'true'
+    if (g__sdcard->getInhAppendEPowerFrame() == false) {
+      /* Le flag 'flg_inh_append_epower_frame' sera maj a 'true'
          => Arret des enregistrements...
       */
-      g__sdcard->appendGpsFrame("#Stop Recording\n");
+      g__sdcard->appendEPowerFrame("#Stop Recording\n");
     }
 
     // Bascule "Autorisation/Inhibition" concatenation infos dans la SDCard
-    g__sdcard->setInhAppendGpsFrame(g__sdcard->getInhAppendGpsFrame() ? false : true);
+    g__sdcard->setInhAppendEPowerFrame(g__sdcard->getInhAppendEPowerFrame() ? false : true);
 
-    if (g__sdcard->getInhAppendGpsFrame() == false) {
-      /* Le flag 'flg_inh_append_gps_frame' est maj a 'false'
+    if (g__sdcard->getInhAppendEPowerFrame() == false) {
+      /* Le flag 'flg_inh_append_epower_frame' est maj a 'false'
          => Reprise des enregistrements...
       */
-      g__sdcard->appendGpsFrame("#Restart Recording\n");
+      g__sdcard->appendEPowerFrame("#Restart Recording\n");
     }
 
     g__menus->exit();

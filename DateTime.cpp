@@ -1,4 +1,4 @@
-// $Id: DateTime.cpp,v 1.14 2025/07/05 17:04:41 administrateur Exp $
+// $Id: DateTime.cpp,v 1.15 2025/07/13 14:14:03 administrateur Exp $
 
 #if USE_SIMULATION
 #include <cstdio>
@@ -117,7 +117,7 @@ long DateTime::calculatedEpochTime(ST_DATE_AND_TIME *i__st_date_and_time)
 }
 
 // TODO: Add test of all fields
-long DateTime::buildGpsDateTime(const char i__date[], const char i__time[], char *o_date_time, ST_DATE_AND_TIME *o__dateAndTime, char *o__text_for_lcd, char *o__text_for_file_record)
+long DateTime::buildEPowerDateTime(const char i__date[], const char i__time[], char *o_date_time, ST_DATE_AND_TIME *o__dateAndTime, char *o__text_for_lcd, char *o__text_for_file_record)
 {
 	ST_DATE_AND_TIME l__dateAndTime;
 	memset(&l__dateAndTime, '\0', sizeof(ST_DATE_AND_TIME));
@@ -311,7 +311,7 @@ bool DateTime::setSommerWinterTimeChange(ST_DATE_AND_TIME *i__dateAndTime)
   // Calculation of day of the week
   l__dateAndTime.day_of_week = (char)((l__epoch / 86400L) % 7L);
 
-#if 0   // TBC: Interference avec les traces d'emission de 'GpsPilot.txt'
+#if 0
   sprintf(l__buffer, "Epoch UNIX GMT [%ld] (%04d/%02d/%02d %02d:%02d:%02d [%s])\n",
     l__epoch,
     2000 + l__dateAndTime.year, l__dateAndTime.month, l__dateAndTime.day,
@@ -678,5 +678,5 @@ void DateTime::getRtcTimeForLcd(char *o__text_for_lcd, char *o__text_for_file_re
   sprintf(l__date, "%02u%02u%02u", timeinfo.tm_mday, (timeinfo.tm_mon + 1), ((1900 + timeinfo.tm_year) % 100));
   sprintf(l__time, "%02d%02d%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
 
-  g__date_time->buildGpsDateTime(l__date, l__time, l__date_time, &l__dateAndTime, o__text_for_lcd, o__text_for_file_record);
+  g__date_time->buildEPowerDateTime(l__date, l__time, l__date_time, &l__dateAndTime, o__text_for_lcd, o__text_for_file_record);
 }

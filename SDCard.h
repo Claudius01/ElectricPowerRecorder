@@ -1,4 +1,4 @@
-// $Id: SDCard.h,v 1.10 2025/07/06 15:58:06 administrateur Exp $
+// $Id: SDCard.h,v 1.12 2025/07/13 14:14:03 administrateur Exp $
 
 #ifndef __SDCARD__
 #define __SDCARD__
@@ -38,8 +38,6 @@
 #define TEXT_POSITION_PROPERTIES_Y    117
 #define TEXT_LENGTH_PROPERTIES         10     // Longueur des proprietes
 
-//#define NAME_OF_FILE_GPS_FRAMES       "/FRAME/GpsFrames.txt"
-
 // Proprietes des fichiers d'enregistrement en cours
 typedef struct {
   size_t      test_size_pre;
@@ -63,7 +61,7 @@ class SDCard : public SD
     uint64_t    cardSize;
 
     bool        flg_sdcard_in_use;
-    bool        flg_inh_append_gps_frame;
+    bool        flg_inh_append_epower_frame;
 
     int         m__index_filename_not_dated;      // Index des fichiers non dates
 
@@ -102,13 +100,13 @@ class SDCard : public SD
     bool isInit()  { return flg_init; };
     bool isInUse() { return flg_sdcard_in_use; };
 
-    // Methods for '/FRAME/GpsFrames.txt' gestion
-    void setInhAppendGpsFrame(bool i__flg) { flg_inh_append_gps_frame = i__flg; };
-    bool getInhAppendGpsFrame() const { return flg_inh_append_gps_frame; };
+    // Gestion des trames d'enregistrements
+    void setInhAppendEPowerFrame(bool i__flg) { flg_inh_append_epower_frame = i__flg; };
+    bool getInhAppendEPowerFrame() const { return flg_inh_append_epower_frame; };
 
-    bool appendGpsFrame(const char *i__frame, boolean i__flg_force_append = false);
-    bool appendGpsFrame(const String &i__frame, boolean i__flg_force_append = false) { return appendGpsFrame(i__frame.c_str()); };
-    size_t getGpsFrameSize() const { return m__file_properties.frame_size; };
+    bool appendEPowerFrame(const char *i__frame, boolean i__flg_force_append = false);
+    bool appendEPowerFrame(const String &i__frame, boolean i__flg_force_append = false) { return appendEPowerFrame(i__frame.c_str()); };
+    size_t getEPowerFrameSize() const { return m__file_properties.frame_size; };
 
     void formatSize(size_t i__value, char *o__buffer) const ;
     void formatValue(uint16_t i__value, char *o__buffer) const { sprintf(o__buffer, "#%u", i__value); };
@@ -136,6 +134,7 @@ class SDCard : public SD
     void resetFileProperties();
     int  getIndexOfFileNameNotDated() const { return m__index_filename_not_dated; };
     void addNewFileRecordName(const char *i__value);
+    void printFileRecordName();
 };
 
 extern void callback_end_sdcard_acces();

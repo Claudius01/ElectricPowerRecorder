@@ -1,4 +1,4 @@
-// $Id: SDCard.cpp,v 1.21 2025/07/06 15:58:06 administrateur Exp $
+// $Id: SDCard.cpp,v 1.23 2025/07/13 14:14:03 administrateur Exp $
 
 #if USE_SIMULATION
 #include "ArduinoTypes.h"
@@ -19,6 +19,7 @@
 #include "Menus.h"
 #include "GestionLCD.h"
 #include "SDCard.h"
+#include "AnalogRead.h"
 
 #if !USE_SIMULATION
 SPIClass spi1(HSPI); // Use the HSPI bus
@@ -27,18 +28,9 @@ SPIClass spi1(HSPI); // Use the HSPI bus
 #define SDCARD_SIMU_SIZE             8000000L      // Taille de la SDCard simulee
 #endif
 
-#if 0
-void callback_activate_sdcard()
-{
-  g__sdcard->callback_sdcard_retry_init_more();
-
-  g__sdcard->appendFile(NAME_OF_FILE_GPS_FRAMES, "\n\n### New recording ###\n");
-}
-#endif
-
 SDCard::SDCard() : flg_init(false), nbr_of_init_retry(0),
                    cardType(CARD_NONE), cardSize((uint64_t)-1),
-                   flg_sdcard_in_use(false), flg_inh_append_gps_frame(false),
+                   flg_sdcard_in_use(false), flg_inh_append_epower_frame(false),
                    m__index_filename_not_dated(0), m__filename_frames("")
 {
   Serial.println("SDCard::SDCard()");
@@ -142,7 +134,7 @@ bool SDCard::init()
 void SDCard::callback_sdcard_retry_init_more()
 {
   if (init() == true) {
-    flg_inh_append_gps_frame = false;
+    flg_inh_append_epower_frame = false;
 
     Serial.printf("SDCard initialized\n");
 
@@ -184,12 +176,7 @@ void SDCard::end()
   stopActivity();
 }
 
-/*  Preparation de la SDCard
- *  - Renommage du fichier 'GpsFrames.txt' avec la datation de la 1st trame GPS
- *    => GPS [AA130910.000B1AC94847.0719D1NEA00157.5195F1EG40.11s40.20H5239.1I6040922K5124.1L1Ma212*3042] (Cks [0x42] Ok)
- *              => Extraction du type 'I' suivi de DDMMYY (ie. 040922)         ^^^^^^ -> 20220904 (YYYMMDD)
- *              => 'GpsFrames.txt' -> 'GpsFrames-20220904-1.txt' (1st suffixe -[0-9]* disponible - fichier inexistant) 
- */
+//  Preparation de la SDCard
 bool SDCard::preparing()
 {
   Serial.println("Preparing of SDCard...");
@@ -229,9 +216,8 @@ size_t SDCard::sizeFile(const char *i__file_name)
   return l__size;
 }
 
-/* Ouverture, concatenation et fermeture dans le fichier 'NAME_OF_FILE_GPS_FRAMES'
- */
-bool SDCard::appendGpsFrame(const char *i__frame, boolean i__flg_force_append)
+// Ouverture, concatenation et fermeture dans le fichier d'enregistrement
+bool SDCard::appendEPowerFrame(const char *i__frame, boolean i__flg_force_append)
 {
   /* Pour le test sur les longueurs ecrites a l'appel precedent
    * et fait avant une nouvelle concatenation
@@ -245,7 +231,7 @@ bool SDCard::appendGpsFrame(const char *i__frame, boolean i__flg_force_append)
 
   Serial.printf("%s(): [%s] Entering...\n", __FUNCTION__, l__filename_frame.c_str());
 
-  if (flg_init == false || flg_inh_append_gps_frame == true
+  if (flg_init == false || flg_inh_append_epower_frame == true
    || (g__flg_inh_sdcard_ope == true && i__flg_force_append == false)) {
     return true;
   }
@@ -259,7 +245,7 @@ bool SDCard::appendGpsFrame(const char *i__frame, boolean i__flg_force_append)
   if (!file) {
     // Failed to open file for appending
 #if 1
-    Serial.printf("SDCard::appendGpsFrame(): [%s] Failed to open file for appending\n", l__filename_frame.c_str());
+    Serial.printf("SDCard::appendEPowerFrame(): [%s] Failed to open file for appending\n", l__filename_frame.c_str());
 #endif
 
     l__flg_rtn = false;
@@ -271,36 +257,36 @@ bool SDCard::appendGpsFrame(const char *i__frame, boolean i__flg_force_append)
       if (l__size == (m__file_properties.test_size_pre + m__file_properties.test_frame_size)) {
 #if 1
         // Trace de l'operation
-        Serial.printf("SDCard::appendGpsFrame(): [%s] Write length: %d = (%d + %d) bytes\n",
+        Serial.printf("SDCard::appendEPowerFrame(): [%s] Write length: %d = (%d + %d) bytes\n",
           l__filename_frame.c_str(), l__size, m__file_properties.test_size_pre, m__file_properties.test_frame_size);
 #endif
       }
       else if (m__file_properties.frame_nbr_records >= 2) {    // Workaround (no error ;-)
-        /* TODO: => Trace "SDCard::appendGpsFrame(): #1: [1852404375] bytes" ?!..
-                 => Trace "error SDCard::appendGpsFrame(): [/EPOWER/EPower-01080000-0000.txt] Error length: 50 != (1852404325 + 50) bytes"
+        /* TODO: => Trace "SDCard::appendEPowerFrame(): #1: [1852404375] bytes" ?!..
+                 => Trace "error SDCard::appendEPowerFrame(): [/EPOWER/EPower-01080000-0000.txt] Error length: 50 != (1852404325 + 50) bytes"
 
            Remarque: A la creation du fichier
                  => Traces a analyser
                           18:15:42.671 -> New Last Undated File: [EPower-01100000-0000.txt]
-                          18:15:42.671 -> appendGpsFrame(): [/EPOWER/EPower-01100000-0000.txt] Entering...
-                          18:15:42.704 -> SDCard::appendGpsFrame(): #1: [1852404375] bytes
+                          18:15:42.671 -> appendEPowerFrame(): [/EPOWER/EPower-01100000-0000.txt] Entering...
+                          18:15:42.704 -> SDCard::appendEPowerFrame(): #1: [1852404375] bytes
 
            Ensuite Ok:
                  => Traces 
-                          18:20:43.525 -> appendGpsFrame(): [/EPOWER/EPower-01100000-0000.txt] Entering...
-                          18:20:43.557 -> SDCard::appendGpsFrame(): [/EPOWER/EPower-01100000-0000.txt] Write length: 812 = (558 + 254) bytes
-                          18:20:43.557 -> SDCard::appendGpsFrame(): #5: [1066] bytes
+                          18:20:43.525 -> appendEPowerFrame(): [/EPOWER/EPower-01100000-0000.txt] Entering...
+                          18:20:43.557 -> SDCard::appendEPowerFrame(): [/EPOWER/EPower-01100000-0000.txt] Write length: 812 = (558 + 254) bytes
+                          18:20:43.557 -> SDCard::appendEPowerFrame(): #5: [1066] bytes
         */
 #if 1
         // Trace de l'erreur
-        Serial.printf("error SDCard::appendGpsFrame(): [%s] Error length: %d != (%d + %d) bytes\n",
+        Serial.printf("error SDCard::appendEPowerFrame(): [%s] Error length: %d != (%d + %d) bytes\n",
           l__filename_frame.c_str(), l__size, m__file_properties.test_size_pre, m__file_properties.test_frame_size);
 #endif
 
         l__flg_rtn = false;
       }
       else {
-        Serial.printf("SDCard::appendGpsFrame(): [%s] No test of size (#%u record)\n",
+        Serial.printf("SDCard::appendEPowerFrame(): [%s] No test of size (#%u record)\n",
           l__filename_frame.c_str(), m__file_properties.frame_nbr_records);
       }
     }
@@ -312,7 +298,7 @@ bool SDCard::appendGpsFrame(const char *i__frame, boolean i__flg_force_append)
       // Line not appended
 
       // Trace de l'ecriture
-      Serial.printf("error SDCard::appendGpsFrame(): Line not appended\n");
+      Serial.printf("error SDCard::appendEPowerFrame(): Line not appended\n");
 
       l__flg_rtn = false;
     }
@@ -322,7 +308,7 @@ bool SDCard::appendGpsFrame(const char *i__frame, boolean i__flg_force_append)
 
 #if 1
       // Trace de l'ecriture
-      Serial.printf("SDCard::appendGpsFrame(): #%u: [%u] bytes\n",
+      Serial.printf("SDCard::appendEPowerFrame(): #%u: [%u] bytes\n",
         m__file_properties.frame_nbr_records, m__file_properties.frame_size);
 #endif
     }
@@ -704,8 +690,8 @@ bool SDCard::deleteFile(const char *i__path)
    - 750.5 Kb (chgt 100 bytes -> ~ trame TLV)
    - 2.567 Mb (chgt  1 Kbytes -> ~ 10 trames TLV)
    - >= 10 Mb -> Invite a changer de fichier ;-)
-                 => Ne se produira pas lorsque le nom du fichier 'GpsFrames.txt'
-                    sera estampille comme 'GpsFrames-20250210.txt'
+                 => Ne se produira pas lorsque le nom du fichier 'EPowerFrames.txt'
+                    sera estampille comme 'EPowerFrames-20250210.txt'
 */
 void SDCard::formatSize(size_t i__value, char *o__buffer) const
 {
@@ -755,7 +741,7 @@ void SDCard::printNameFile()
 
   // Affichage sur le LCD @ a l'etat d'inhibition d'ecriture de la SDCard
   g__gestion_lcd->Paint_DrawString_EN(TEXT_POSITION_PROPERTIES_X, TEXT_POSITION_PROPERTIES_Y,
-    l__buffer, &Font12, BLACK, (getInhAppendGpsFrame() == false) ? GREEN : WHITE);
+    l__buffer, &Font12, BLACK, (getInhAppendEPowerFrame() == false) ? GREEN : WHITE);
 
 #if USE_SIMULATION
   printf("File [%s]\n", l__buffer);
@@ -786,7 +772,7 @@ void SDCard::printSizeFile()
 
   // Affichage sur le LCD @ a l'etat d'inhibition d'ecriture de la SDCard
   g__gestion_lcd->Paint_DrawString_EN(TEXT_POSITION_PROPERTIES_X, TEXT_POSITION_PROPERTIES_Y,
-    l__buffer, &Font12, BLACK, (getInhAppendGpsFrame() == false) ? GREEN : WHITE);
+    l__buffer, &Font12, BLACK, (getInhAppendEPowerFrame() == false) ? GREEN : WHITE);
 
 #if USE_SIMULATION
   printf("Size [%s]\n", l__buffer);
@@ -807,7 +793,7 @@ void SDCard::printNbrRecords()
 
   // Affichage sur le LCD @ a l'etat d'inhibition d'ecriture de la SDCard
   g__gestion_lcd->Paint_DrawString_EN(TEXT_POSITION_PROPERTIES_X, TEXT_POSITION_PROPERTIES_Y,
-    l__buffer, &Font12, BLACK, (getInhAppendGpsFrame() == false) ? GREEN : WHITE);
+    l__buffer, &Font12, BLACK, (getInhAppendEPowerFrame() == false) ? GREEN : WHITE);
 
 #if USE_SIMULATION
   printf("Nbr Records [%s]\n", l__buffer);
@@ -828,7 +814,7 @@ void SDCard::printNbrErrors()
 
   // Affichage sur le LCD @ au nombre d'erreurs et l'etat d'inhibition d'ecriture de la SDCard
   g__gestion_lcd->Paint_DrawString_EN(TEXT_POSITION_PROPERTIES_X, TEXT_POSITION_PROPERTIES_Y,
-    l__buffer, &Font12, BLACK, ((m__file_properties.frame_nbr_errors == 0) ? ((getInhAppendGpsFrame() == false) ? YELLOW : WHITE) : RED));
+    l__buffer, &Font12, BLACK, ((m__file_properties.frame_nbr_errors == 0) ? ((getInhAppendEPowerFrame() == false) ? YELLOW : WHITE) : RED));
 
 #if USE_SIMULATION
   printf("Nbr Errors [%s]\n", l__buffer);
@@ -861,7 +847,23 @@ void SDCard::addNewFileRecordName(const char *i__value)
   }
 
   // Marquage du nouveau fichier...
-  if (getInhAppendGpsFrame() == false && l__flg_new_file == true) {
+  if (getInhAppendEPowerFrame() == false && l__flg_new_file == true) {
+    /* Marquage fin des enregistrements dans le precedent fichier si defini
+       => Warning: 2 fichiers doivent rester defini dans le vecteur 'm__file_record_name'
+                   pour appliquer le marquage ;-)
+    */
+    if (m__file_record_name.size() > 1 && m__filename_frames.isEmpty() == false) {
+      // Ecriture de l'enregistrement en cours
+      if (g__analog_read_1->isFrameRecordingInUse() == true) {
+        g__analog_read_1->writeFrameRecording();
+      }
+
+      String l__text = "";
+      l__text.concat("#End Recording\n");
+
+      appendEPowerFrame(l__text);
+    }
+
     // Reset des proprietes du nouveau fichier d'enregistrement
     resetFileProperties();
 
@@ -875,15 +877,17 @@ void SDCard::addNewFileRecordName(const char *i__value)
     l__text.concat("]\n");
     l__text.concat("#Start Recording\n");
 
-    appendGpsFrame(l__text);
+    appendEPowerFrame(l__text);
   }
   // Fin: Marquage du nouveau fichier...
 
+#if 0
   Serial.printf("%s(): List of %d file record name\n", __FUNCTION__, m__file_record_name.size());
   unsigned int l__idx = 0;
   for (std::vector<String>::iterator it = m__file_record_name.begin(); it != m__file_record_name.end(); ++it) {
     Serial.printf("#%d: [%s]\n", l__idx++, (*it).c_str());
   }
+#endif
 }
 
 void SDCard::resetFileProperties()
@@ -894,4 +898,13 @@ void SDCard::resetFileProperties()
   m__file_properties.frame_size = 0;
   m__file_properties.frame_nbr_records = 0;
   m__file_properties.frame_nbr_errors = 0;
+}
+
+void SDCard::printFileRecordName()
+{
+  Serial.printf("%s(): List of %d file record name\n", __FUNCTION__, m__file_record_name.size());
+  unsigned int l__idx = 0;
+  for (std::vector<String>::iterator it = m__file_record_name.begin(); it != m__file_record_name.end(); ++it) {
+    Serial.printf("#%d: [%s]\n", l__idx++, (*it).c_str());
+  }
 }

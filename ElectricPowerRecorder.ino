@@ -1,4 +1,4 @@
-// $Id: ElectricPowerRecorder.ino,v 1.93 2025/07/06 15:58:06 administrateur Exp $
+// $Id: ElectricPowerRecorder.ino,v 1.96 2025/07/13 14:14:03 administrateur Exp $
 
 /* Projet: ElectricPowerRecorder
 */
@@ -32,7 +32,7 @@
 #endif
 
 #define COPYRIGHT   "@micro-infos.com"
-#define PROMPT      "ElectricPowerRecorder 2025/07/06 V1.7"
+#define PROMPT      "ElectricPowerRecorder 2025/07/13 V1.7"
 
 #define USE_INCOMING_CMD    1
 
@@ -789,7 +789,7 @@ void loop()
     static bool g__flg_progress = false;
 
     if (g__flg_progress == false) {
-      // Emission exclusive des trames TLV et du fichier 'GpsPilot.txt'
+      // Provision: Emission exclusive d'autres trames
 
       g__flg_progress = true;
     }
@@ -826,7 +826,7 @@ void loop()
     g__date_time->setRtcSecInDayGmt();
 
     if (g__sdcard->isInit()) {
-      if (g__sdcard->getInhAppendGpsFrame()) {
+      if (g__sdcard->getInhAppendEPowerFrame()) {
         // La SDCard est initialisee et non autorisee a ecrire
         g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_BLUE, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, WHITE);
       }
@@ -837,7 +837,7 @@ void loop()
     }
     else {
       // La SDCard n'est pas initialisee
-      if (g__sdcard->getInhAppendGpsFrame()) {
+      if (g__sdcard->getInhAppendEPowerFrame()) {
         // La SDCard est non autorisee a ecrire (presentation)
         g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_BLUE, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, WHITE);
       }
@@ -879,7 +879,7 @@ void loop()
           compte tenue de la lecture ici ;-)
           => Le retour de 'g__date_time->getDurationInUse()' est toujours incremente de +1 ici ;-))
     */
-    //if ((g__date_time->getDurationInUse() % 60L) == 0) {
+    if ((g__date_time->getDurationInUse() % 60L) == 0) {
       Serial.printf("#1: Epoch Start [%lu] Epoch [%lu] (+%lu) Derive (%c%lu) Current [%lu] -> [%lu] Sec (%02uh%02u'%02u\" GMT+%d)\n",
         g__date_time->getEpochStart(), g__date_time->getEpoch(), g__date_time->getEpochDiff(),
         (g__duration_diff < 0 ? '-' : '+'), (g__duration_diff < 0 ? -g__duration_diff : g__duration_diff),
@@ -890,26 +890,7 @@ void loop()
         g__date_time->getRtcSecInDayOffset());
 
     // Construction du fichier d'enregistrement en remplacement de celui non date
-#if 0
-    {
-      struct tm timeinfo = g__rtc->getTimeStruct();
-
-	    Serial.printf("File record name [%04d%02d%02d-%02d%02d GMT+%d]\n",
-		    (1900 + timeinfo.tm_year), (timeinfo.tm_mon + 1), timeinfo.tm_mday,
-		    timeinfo.tm_hour, timeinfo.tm_min,
-        g__date_time->getRtcSecInDayOffset());
-
-#if USE_SIMULATION
-      printf("File record name [%s%04u%02u%02u-%02u%02u-GMT+%d.txt]\n",
-        UNDATED_FILE_PATTERN_YEARS,
-        (1900 + timeinfo.tm_year), (timeinfo.tm_mon + 1), timeinfo.tm_mday,
-		    timeinfo.tm_hour, timeinfo.tm_min,
-        g__date_time->getRtcSecInDayOffset());
-#endif
-      // Fin: Construction du fichier d'enregistrement en remplacement de celui non date
     }
-#endif
-    //}
     // Fin: Traces de gestion des temps (1 fois toutes les minutes)...
 
     /* Calcul de la plage [begin, ..., end] correspondant au debut et a la fin la periode @ definition
@@ -945,7 +926,7 @@ void loop()
           l__str_for_file_record.concat(l__text_for_file_record);
           l__str_for_file_record.concat(".txt");
 
-#if USE_SIMULATION
+#if 0   //USE_SIMULATION
           printf("File Record [%s]\n", l__str_for_file_record.c_str());
 #endif
           g__sdcard->addNewFileRecordName(l__str_for_file_record.c_str());
@@ -967,7 +948,7 @@ void loop()
           l__str_for_file_record.concat(l__text_for_file_record);
           l__str_for_file_record.concat(".txt");
 
-#if USE_SIMULATION
+#if 0   //USE_SIMULATION
           printf("File Record [%s]\n", l__str_for_file_record.c_str());
 #endif
           g__sdcard->addNewFileRecordName(l__str_for_file_record.c_str());
@@ -1050,17 +1031,18 @@ void usage_sdcard()
 	Serial.printf("- init                              Initialisation\n");
 	Serial.printf("- end                               Terminaison (permet une reprise apres les erreurs de la SD Card)\n");
 	Serial.printf("- prepare                           Preparation\n");
-	Serial.printf("- setInhAppendGpsFrame <flg>        Set/Reset inhibition of appending in 'GpsFrames.txt' (<flg> optional - true by default)\n");
+	Serial.printf("- setInhAppendEPowerFrame <flg>     Set/Reset inhibition of appending in 'EPowerFrames.txt' (<flg> optional - true by default)\n");
 	Serial.printf("- printInfos                        Informations (type et taille)\n");
 	Serial.printf("- listdir <dir>                     Liste d'un repertoire donne (ie. /, /PILOT, etc.)\n");
 	Serial.printf("- exists <path>                     Existence d'un repertoire ou d'un fichier\n");
-	Serial.printf("- readFile <file>                   Lecture et impression d'un fichier donne (ie. /PILOT/GpsPilot.txt)\n");
+	Serial.printf("- readFile <file>                   Lecture et impression d'un fichier donne (ie. /EPOWER/EPower-20250713-0401-GMT+2.txt)\n");
 	Serial.printf("- readFileLine <file>               Lectures successives d'une ligne d'un fichier jusqu'a la fin\n");
 	Serial.printf("- getFileLine <file> <nbr_lines>    Lectures successives de 'nbr_lines' lignes d'un fichier\n");
 	Serial.printf("- appendFile <file> <patterns>      Concatenation dans <file> avec des patterns constituant une ligne (ie. /LOG/log.txt ajout d'une ligne)\n");
 	Serial.printf("- renameFile <path_from> <path_to>  Renommage d'un repertoire ou d'un fichier\n");
 	Serial.printf("- deleteFile <file>                 Suppression d'un fichier\n");
-	Serial.printf("- getFileLines [<file>]             Ouverture, lecture et analyse des enregistrements de <file> si non NULL; sinon 'NAME_OF_FILE_GPS_PILOT'\n");
+	Serial.printf("- getFileLines [<file>]             Ouverture, lecture et analyse des enregistrements de <file>\n");
+	Serial.printf("- printFileRecordName               Liste des fichiers d'enregistrement\n");
 }
 
 void execCommandRTC(char *i__copy_incomming_buff)
@@ -1130,9 +1112,7 @@ void execCommandRTC(char *i__copy_incomming_buff)
 		Serial.printf("   Epoch [%lu]\n", g__rtc->getEpoch());
 
 		if (g__date_time->isRtcInit()) {
-			/* Presentation pour le LCD
-			   => Utilisation du code de 'GpsRecorder' pour beneficier du changement d'heure ete/hiver ;-)
-			*/
+			// Presentation pour le LCD
 			char l__date[6 + 1];
 			memset(l__date, '\0', sizeof(l__date));
 			char l__time[6 + 1];
@@ -1150,7 +1130,7 @@ void execCommandRTC(char *i__copy_incomming_buff)
 			sprintf(l__date, "%02u%02u%02u", timeinfo.tm_mday, (timeinfo.tm_mon + 1), ((1900 + timeinfo.tm_year) % 100));
 			sprintf(l__time, "%02d%02d%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
 
-			g__date_time->buildGpsDateTime(l__date, l__time, l__date_time, &l__dateAndTime, l__text_for_lcd, l__text_for_file_record);
+			g__date_time->buildEPowerDateTime(l__date, l__time, l__date_time, &l__dateAndTime, l__text_for_lcd, l__text_for_file_record);
 
 			Serial.printf("   LCD         [%s]\n", l__text_for_lcd);
 			Serial.printf("   File Record [%s]\n", l__text_for_file_record);
@@ -1399,263 +1379,256 @@ void gestionOfCommands()
       Serial.printf("] (length: %d)\n", strlen(g__incoming_buff));
 
       if (!strncmp(g__incoming_buff, "Paint", strlen("Paint"))) {
-      	strcpy(l__copy_incomming_buff, g__incoming_buff);
+        strcpy(l__copy_incomming_buff, g__incoming_buff);
 
-         char *l__pattern = strtok(l__copy_incomming_buff, " ");    // Skip command
-         l__pattern = strtok(NULL, " ");                   // Get the sub-command
-         if (l__pattern != NULL) {
-         	if (!strcmp(l__pattern, "cache")) {            // 'cache' sub-command
+        char *l__pattern = strtok(l__copy_incomming_buff, " ");    // Skip command
+        l__pattern = strtok(NULL, " ");                   // Get the sub-command
+        if (l__pattern != NULL) {
+          if (!strcmp(l__pattern, "cache")) {            // 'cache' sub-command
             dumpCache(0, 239);
 
             statsCache();
           }
           else {
-            	Serial.printf("Unknown sub-command [%s]\n", l__pattern);
+            Serial.printf("Unknown sub-command [%s]\n", l__pattern);
           }
         }
         else {
-			    usage_paint();
+          usage_paint();
         }
       }
       else if (!strncmp(g__incoming_buff, "SDCard", strlen("SDCard"))) {
-      	strcpy(l__copy_incomming_buff, g__incoming_buff);
+        strcpy(l__copy_incomming_buff, g__incoming_buff);
 
-         char *l__pattern = strtok(l__copy_incomming_buff, " ");    // Skip command
-         l__pattern = strtok(NULL, " ");                   // Get the sub-command
-         if (l__pattern != NULL) {
-         	if (!strcmp(l__pattern, "init")) {              // 'init' sub-command
-            	bool l__flg_rtn = g__sdcard->init();
-            	Serial.printf("\t=> init(): [%s]\n", (l__flg_rtn == true) ? "Ok" : "Ko");
+        char *l__pattern = strtok(l__copy_incomming_buff, " ");    // Skip command
+        l__pattern = strtok(NULL, " ");                   // Get the sub-command
+        if (l__pattern != NULL) {
+          if (!strcmp(l__pattern, "init")) {              // 'init' sub-command
+            bool l__flg_rtn = g__sdcard->init();
+            Serial.printf("\t=> init(): [%s]\n", (l__flg_rtn == true) ? "Ok" : "Ko");
+          }
+          else if (!strcmp(l__pattern, "end")) {              // 'end' sub-command
+            g__sdcard->end();
+            Serial.printf("\t=> end(): No rtn code\n");
+          }
+          else if (!strcmp(l__pattern, "prepare")) {        // 'end' sub-command
+            g__sdcard->init(3);                           // 10 tentatives
+            g__sdcard->callback_sdcard_retry_init_more();
+          }
+          else if (!strcmp(l__pattern, "printInfos")) {   // 'printInfos' sub-command
+            bool l__flg_rtn = g__sdcard->printInfos();
+            Serial.printf("\t=> printInfos(): [%s]\n", (l__flg_rtn == true) ? "Ok" : "Ko");
+          }
+          else if (!strcmp(l__pattern, "listDir")) {      // 'listDir' sub-command
+            l__pattern = strtok(NULL, " ");               // Get the directory name
+            const char *l__dir = "/";                     // Root by default
+            if (l__pattern != NULL) {
+              l__dir = l__pattern;
             }
-            else if (!strcmp(l__pattern, "end")) {              // 'end' sub-command
-               g__sdcard->end();
-               Serial.printf("\t=> end(): No rtn code\n");
+            bool l__flg_rtn = g__sdcard->listDir(l__dir);
+            Serial.printf("\t=> listDir(%s): [%s]\n", l__dir, (l__flg_rtn == true) ? "Ok" : "Ko");
+          }
+          else if (!strcmp(l__pattern, "exists")) {        // 'exists' sub-command
+            l__pattern = strtok(NULL, " ");                // Get the path name
+            if (l__pattern != NULL) {
+              const char *l__path = l__pattern;
+              bool l__flg_rtn = g__sdcard->exists(l__path);
+              Serial.printf("\t=> exists(%s): [%s]\n", l__path, (l__flg_rtn == true) ? "Ok" : "Ko");              
             }
-            else if (!strcmp(l__pattern, "prepare")) {        // 'end' sub-command
-               g__sdcard->init(3);                           // 10 tentatives
-               g__sdcard->callback_sdcard_retry_init_more();
+            else {
+              Serial.printf("\t=> exists(): Missing file name\n");                              
             }
-            else if (!strcmp(l__pattern, "printInfos")) {   // 'printInfos' sub-command
-              bool l__flg_rtn = g__sdcard->printInfos();
-              Serial.printf("\t=> printInfos(): [%s]\n", (l__flg_rtn == true) ? "Ok" : "Ko");
+          }
+          else if (!strcmp(l__pattern, "readFile")) {      // 'readFile' sub-command
+            l__pattern = strtok(NULL, " ");                // Get the file name
+            if (l__pattern != NULL) {
+              const char *l__file = l__pattern;
+              bool l__flg_rtn = g__sdcard->readFile(l__file);
+              Serial.printf("\t=> readFile(%s): [%s]\n", l__file, (l__flg_rtn == true) ? "Ok" : "Ko");                
             }
-            else if (!strcmp(l__pattern, "listDir")) {      // 'listDir' sub-command
-               l__pattern = strtok(NULL, " ");               // Get the directory name
-               const char *l__dir = "/";                     // Root by default
-               if (l__pattern != NULL) {
-						l__dir = l__pattern;
-              	}
-              	bool l__flg_rtn = g__sdcard->listDir(l__dir);
-              	Serial.printf("\t=> listDir(%s): [%s]\n", l__dir, (l__flg_rtn == true) ? "Ok" : "Ko");
+            else {
+              Serial.printf("\t=> readFile(): Missing file name\n");
             }
-            else if (!strcmp(l__pattern, "exists")) {        // 'exists' sub-command
-              l__pattern = strtok(NULL, " ");                // Get the path name
+          }
+          else if (!strcmp(l__pattern, "getFileLine")) {   // 'getFileLine' sub-command
+            l__pattern = strtok(NULL, " ");                // Get the file name
+            if (l__pattern != NULL) {
+              const char *l__file = l__pattern;
+
+              l__pattern = strtok(NULL, " ");               // Get the nbr of lines
               if (l__pattern != NULL) {
-                const char *l__path = l__pattern;
-                bool l__flg_rtn = g__sdcard->exists(l__path);
-                Serial.printf("\t=> exists(%s): [%s]\n", l__path, (l__flg_rtn == true) ? "Ok" : "Ko");              
+                int l__nbr_lines = (int)strtol(l__pattern, NULL, 10);
+
+                for (int n = 0; n < l__nbr_lines; n++) {
+                  String l__line = "";
+
+                  bool l__flg_rtn = g__sdcard->getFileLine(
+                    (n == 0) ? l__file : NULL,                  // Passage du nom du fichier sur la 1st demande
+                    l__line,
+                    (n == (l__nbr_lines - 1)) ? true : false);  // Cloture du fichier sur la derniere demande
+
+                  Serial.printf("\t=> #%d: getFileLine(%s): [%s] [%s]\n", n, l__file, (l__flg_rtn == true) ? "Ok" : "Ko", l__line.c_str());
+
+                  if (l__flg_rtn == false) {
+                    break;
+                  }
+                }
               }
               else {
-                Serial.printf("\t=> exists(): Missing file name\n");                              
+                Serial.printf("\t=> getFileLine(): Missing nbr lines\n");
               }
             }
-            else if (!strcmp(l__pattern, "readFile")) {      // 'readFile' sub-command
-              l__pattern = strtok(NULL, " ");                // Get the file name
-              if (l__pattern != NULL) {
-                const char *l__file = l__pattern;
-                bool l__flg_rtn = g__sdcard->readFile(l__file);
-                Serial.printf("\t=> readFile(%s): [%s]\n", l__file, (l__flg_rtn == true) ? "Ok" : "Ko");              
+            else {
+              Serial.printf("\t=> getFileLine(): Missing file name\n");
+            }
+          }
+          else if (!strcmp(l__pattern, "readFileLine")) {  // 'readFileLine' sub-command
+            l__pattern = strtok(NULL, " ");                // Get the file name
+            if (l__pattern != NULL) {
+              const char *l__file = l__pattern;
+
+              // Determination de la taille du fichier
+              size_t l__size_file = g__sdcard->sizeFile(l__file);
+
+              if (l__size_file != (size_t)-1) {
+                size_t l__size_read = 0;
+
+                for (int n = 0; n < 1000; n++) {   // Protection a 1000 lectures
+                  bool l__flg_rtn = false;
+                  String l__line = "";
+
+                  /* Passage du nom du fichier sur la 1st lecture
+                     => 'l__line' est depossede du '\n' terminal
+                  */
+                  size_t l__size = g__sdcard->readFileLine((n == 0 ? l__file : NULL), l__line);
+
+                  if (l__size != (size_t)-1) {
+                    l__size_read += (l__size + 1);    // +1 for '\n'
+                    l__flg_rtn = true;
+                  }
+
+                  Serial.printf("\t=> #%d: readFileLine(%s): [%s] [%s] (%u bytes) (%u bytes read)\n",
+                    n, l__file, (l__flg_rtn == true) ? "Ok" : "Ko", l__line.c_str(), l__size, l__size_read);
+
+                  if (l__flg_rtn == false) {
+                    Serial.printf("\t=> readFileLine(%s): Error read\n", l__file);
+                    break;
+                  }
+
+                  // Cloture et arret si totalite du fichier lu
+                  if (l__size_read == l__size_file) {
+                    g__sdcard->readFileLine(NULL, l__line, true);
+
+                    Serial.printf("\t=> readFileLine(%s): End of read (Ok)\n", l__file);
+                    break;
+                  }
+
+                  // Cloture et arret si depassement du fichier lu
+                  if (l__size_read > l__size_file) {
+                    g__sdcard->readFileLine(NULL, l__line, true);
+
+                    Serial.printf("\t=> readFileLine(%s): End of read (Ko)\n", l__file);
+                    break;
+                  }
+                }
               }
               else {
-                Serial.printf("\t=> readFile(): Missing file name\n");
+                Serial.printf("\t=> readFileLine(%s): Error read size\n", l__file);
               }
             }
-            else if (!strcmp(l__pattern, "getFileLine")) {   // 'getFileLine' sub-command
-              l__pattern = strtok(NULL, " ");                // Get the file name
-              if (l__pattern != NULL) {
-                const char *l__file = l__pattern;
-
-                l__pattern = strtok(NULL, " ");               // Get the nbr of lines
+            else {
+              Serial.printf("\t=> readFileLine(): Missing file name\n");
+            }
+          }
+          else if (!strcmp(l__pattern, "appendFile")) {     // 'appendFile' sub-command
+            l__pattern = strtok(NULL, " ");                 // Get the file name
+            if (l__pattern != NULL) {
+              const char *l__file = l__pattern;
+              String l__line = "";
+              l__pattern = strtok(NULL, " ");               // Get the line
+              while (l__pattern != NULL) {
+                l__line += l__pattern;
+                l__pattern = strtok(NULL, " ");             // Cont'd ...
                 if (l__pattern != NULL) {
-                  int l__nbr_lines = (int)strtol(l__pattern, NULL, 10);
-
-                  for (int n = 0; n < l__nbr_lines; n++) {
-                    String l__line = "";
-
-                    bool l__flg_rtn = g__sdcard->getFileLine(
-                      (n == 0) ? l__file : NULL,                  // Passage du nom du fichier sur la 1st demande
-                      l__line,
-                      (n == (l__nbr_lines - 1)) ? true : false);  // Cloture du fichier sur la derniere demande
-
-                    Serial.printf("\t=> #%d: getFileLine(%s): [%s] [%s]\n", n, l__file, (l__flg_rtn == true) ? "Ok" : "Ko", l__line.c_str());
-
-                    if (l__flg_rtn == false) {
-                      break;
-                    }
-                  }
+                  l__line += " ";                           // ... with ' ' separator
                 }
-                else {
-                  Serial.printf("\t=> getFileLine(): Missing nbr lines\n");
-                }
+              }
+              l__line += "\n";                              // LF terminal for each line
+
+              bool l__flg_rtn = g__sdcard->appendFile(l__file, l__line.c_str());
+              Serial.printf("\t=> appendFile([%s], [%s]): [%s]\n", l__file, l__line.c_str(), (l__flg_rtn == true) ? "Ok" : "Ko");              
+            }
+            else {
+              Serial.printf("\t=> appendFile(): Missing file name\n");                              
+            }
+          }
+          else if (!strcmp(l__pattern, "renameFile")) {     // 'renameFile' sub-command
+            l__pattern = strtok(NULL, " ");                 // Get the 1st path name
+            if (l__pattern != NULL) {
+              const char *l__path_from = l__pattern;
+              l__pattern = strtok(NULL, " ");               // Get the 2nd path name
+              if (l__pattern != NULL) {
+                const char *l__path_to = l__pattern;
+
+                bool l__flg_rtn = g__sdcard->renameFile(l__path_from, l__path_to);
+                Serial.printf("\t=> renamedFile([%s], [%s]): [%s]\n", l__path_from, l__path_to, (l__flg_rtn == true) ? "Ok" : "Ko");
               }
               else {
-                Serial.printf("\t=> getFileLine(): Missing file name\n");
+                Serial.printf("\t=> renameFile(): Missing 2nd path name\n");                              
               }
             }
-            else if (!strcmp(l__pattern, "readFileLine")) {  // 'readFileLine' sub-command
-              l__pattern = strtok(NULL, " ");                // Get the file name
-              if (l__pattern != NULL) {
-                const char *l__file = l__pattern;
+            else {
+              Serial.printf("\t=> renameFile(): Missing 1st path name\n");                              
+            }
+          }
+          else if (!strcmp(l__pattern, "deleteFile")) {     // 'deleteFile' sub-command
+            l__pattern = strtok(NULL, " ");                 // Get the file name
+            if (l__pattern != NULL) {
+              const char *l__file = l__pattern;
 
-                // Determination de la taille du fichier
-                size_t l__size_file = g__sdcard->sizeFile(l__file);
-
-                if (l__size_file != (size_t)-1) {
-                  size_t l__size_read = 0;
-
-                  for (int n = 0; n < 1000; n++) {   // Protection a 1000 lectures
-                    bool l__flg_rtn = false;
-                    String l__line = "";
-
-                    /* Passage du nom du fichier sur la 1st lecture
-                       => 'l__line' est depossede du '\n' terminal
-                    */
-                    size_t l__size = g__sdcard->readFileLine((n == 0 ? l__file : NULL), l__line);
-
-                    if (l__size != (size_t)-1) {
-                      l__size_read += (l__size + 1);    // +1 for '\n'
-                      l__flg_rtn = true;
-                    }
-
-                    Serial.printf("\t=> #%d: readFileLine(%s): [%s] [%s] (%u bytes) (%u bytes read)\n",
-                      n, l__file, (l__flg_rtn == true) ? "Ok" : "Ko", l__line.c_str(), l__size, l__size_read);
-
-                    if (l__flg_rtn == false) {
-                      Serial.printf("\t=> readFileLine(%s): Error read\n", l__file);
-                      break;
-                    }
-
-                    // Cloture et arret si totalite du fichier lu
-                    if (l__size_read == l__size_file) {
-                      g__sdcard->readFileLine(NULL, l__line, true);
-
-                      Serial.printf("\t=> readFileLine(%s): End of read (Ok)\n", l__file);
-                      break;
-                    }
-
-                    // Cloture et arret si depassement du fichier lu
-                    if (l__size_read > l__size_file) {
-                      g__sdcard->readFileLine(NULL, l__line, true);
-
-                      Serial.printf("\t=> readFileLine(%s): End of read (Ko)\n", l__file);
-                      break;
-                    }
-                  }
-                }
-                else {
-                  Serial.printf("\t=> readFileLine(%s): Error read size\n", l__file);
-                }
+              bool l__flg_rtn = g__sdcard->deleteFile(l__file);
+              Serial.printf("\t=> deleteFile(%s): [%s]\n", l__file, (l__flg_rtn == true) ? "Ok" : "Ko");
+            }
+            else {
+              Serial.printf("\t=> deleteFile(): Missing file name\n");                              
+            }
+          }
+          else if (!strcmp(l__pattern, "setInhAppendEPowerFrame")) {      // 'setInhAppendEPowerFrame' sub-command
+            l__pattern = strtok(NULL, " ");                            // Get the flag (true/false pattern)
+            if (l__pattern != NULL) {
+              if (!strcmp(l__pattern, "false")) {
+                g__sdcard->setInhAppendEPowerFrame(false);
               }
               else {
-                Serial.printf("\t=> readFileLine(): Missing file name\n");
-              }
+                g__sdcard->setInhAppendEPowerFrame(true);
+              }   
             }
-            else if (!strcmp(l__pattern, "appendFile")) {     // 'appendFile' sub-command
-              l__pattern = strtok(NULL, " ");                 // Get the file name
-              if (l__pattern != NULL) {
-                const char *l__file = l__pattern;
-                String l__line = "";
-                l__pattern = strtok(NULL, " ");               // Get the line
-                while (l__pattern != NULL) {
-                  l__line += l__pattern;
-                  l__pattern = strtok(NULL, " ");             // Cont'd ...
-                  if (l__pattern != NULL) {
-                    l__line += " ";                           // ... with ' ' separator
-                  }
-                }
-                l__line += "\n";                              // LF terminal for each line
-
-                bool l__flg_rtn = g__sdcard->appendFile(l__file, l__line.c_str());
-                Serial.printf("\t=> appendFile([%s], [%s]): [%s]\n", l__file, l__line.c_str(), (l__flg_rtn == true) ? "Ok" : "Ko");              
-              }
-              else {
-                Serial.printf("\t=> appendFile(): Missing file name\n");                              
-              }
+            else {
+              g__sdcard->setInhAppendEPowerFrame(true);
             }
-            else if (!strcmp(l__pattern, "renameFile")) {     // 'renameFile' sub-command
-              l__pattern = strtok(NULL, " ");                 // Get the 1st path name
-              if (l__pattern != NULL) {
-                const char *l__path_from = l__pattern;
-                l__pattern = strtok(NULL, " ");               // Get the 2nd path name
-                if (l__pattern != NULL) {
-                  const char *l__path_to = l__pattern;
-
-                  bool l__flg_rtn = g__sdcard->renameFile(l__path_from, l__path_to);
-                  Serial.printf("\t=> renamedFile([%s], [%s]): [%s]\n", l__path_from, l__path_to, (l__flg_rtn == true) ? "Ok" : "Ko");
-                }
-                else {
-                  Serial.printf("\t=> renameFile(): Missing 2nd path name\n");                              
-                }
-              }
-              else {
-                Serial.printf("\t=> renameFile(): Missing 1st path name\n");                              
-              }
-            }
-            else if (!strcmp(l__pattern, "deleteFile")) {     // 'deleteFile' sub-command
-              l__pattern = strtok(NULL, " ");                 // Get the file name
-              if (l__pattern != NULL) {
-                const char *l__file = l__pattern;
-
-                bool l__flg_rtn = g__sdcard->deleteFile(l__file);
-                Serial.printf("\t=> deleteFile(%s): [%s]\n", l__file, (l__flg_rtn == true) ? "Ok" : "Ko");
-              }
-              else {
-                Serial.printf("\t=> deleteFile(): Missing file name\n");                              
-              }
-            }
-            else if (!strcmp(l__pattern, "setInhAppendGpsFrame")) {      // 'setInhAppendGpsFrame' sub-command
-              l__pattern = strtok(NULL, " ");                            // Get the flag (true/false pattern)
-              if (l__pattern != NULL) {
-                if (!strcmp(l__pattern, "false")) {
-                  g__sdcard->setInhAppendGpsFrame(false);
-                }
-                else {
-                  g__sdcard->setInhAppendGpsFrame(true);
-                }   
-              }
-              else {
-                g__sdcard->setInhAppendGpsFrame(true);
-              }
-            }
-#if 0
-            else if (!strcmp(l__pattern, "getFileLines")) {   // 'getFileLines' sub-command
-              //char *l__file = NULL;
-              l__pattern = strtok(NULL, " ");                 // Get the file name if exists
-              if (l__pattern != NULL) {
-                l__file = l__pattern;
-              }
-              g__file_gpspilot->getFileLines(l__file, true);
-            }
-#endif
-          	else {
-            	Serial.printf("Unknown sub-command [%s]\n", l__pattern);
-          	}
+          }
+          else if (!strcmp(l__pattern, "printFileRecordName")) {      // 'printFileRecordName' sub-command
+            g__sdcard->printFileRecordName();
           }
           else {
-				    usage_sdcard();
+            Serial.printf("Unknown sub-command [%s]\n", l__pattern);
           }
         }
-        // Fin: Test de la SDCard
+        else {
+            usage_sdcard();
+        }
+      }
+      // Fin: Test de la SDCard
 
       else if (!strncmp(g__incoming_buff, "RTC", strlen("RTC"))) {
         strcpy(l__copy_incomming_buff, g__incoming_buff);
 
         execCommandRTC(l__copy_incomming_buff);
       }
-        else {
-          Serial.printf("Unknown command [%s]\n", g__incoming_buff);
-				  usage_cmd();
-        }
+      else {
+        Serial.printf("Unknown command [%s]\n", g__incoming_buff);
+				usage_cmd();
+      }
 
       g__flg_wait_command = true;
     }

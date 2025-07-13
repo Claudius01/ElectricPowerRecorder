@@ -1,4 +1,4 @@
-// $Id: Timers.cpp,v 1.9 2025/06/02 13:16:01 administrateur Exp $
+// $Id: Timers.cpp,v 1.11 2025/07/12 16:40:52 administrateur Exp $
 
 /* Evolutions:
    - 2025/02/21: Utilisation de 'Serial.printf()'
@@ -19,23 +19,11 @@
 static ST_TIMERS        g__st_timers[] =
 {
   { TIMER_CHENILLARD, false, "Chenillard" },
-  { TIMER_CONNECT,    false, "Connect" },
 
   { TIMER_SDCARD_ACCES,       false, "SD Card acces" },
   { TIMER_SDCARD_ERROR,       false, "SD Card error" },
   { TIMER_SDCARD_RETRY_INIT,  false, "SD Card retry init" },
   { TIMER_SDCARD_INIT_ERROR,  false, "SD Card init error" },
-
-  { TIMER_NMEA_ACTIVITY,      false, "Activite NMEA" },
-  { TIMER_NMEA_ERROR,         false, "NMEA error" },
-
-  { TIMER_SEND_GPSPILOT,      false, "Emission GpsPilot" },
-  { TIMER_ACTIVATE_SDCARD,    false, "Activite SDCARD" },
-
-#if 0
-  { TIMER_CONFIG_RTC_SCROLLING, false, "Config RTC Scrolling" },
-  { TIMER_CONFIG_RTC_WAIT_ACQ,  false, "Config RTC Wait Acq" },
-#endif
 
   { TIMER_ANALOG_ACQ,          false, "Analog acq" },
 
@@ -64,8 +52,13 @@ Timers::Timers()
   // Verification des definitions dans 'g__st_timers'
   size_t l__nbr_timers = (sizeof(g__st_timers) / sizeof(ST_TIMERS));
   if (l__nbr_timers != NBR_OF_TIMERS) {
-	 Serial.printf("Timers::Timers(): Error of 'g__st_timers' definition\n");
-	 Serial.printf("Timers::Timers(): [%d] != [%d]\n", l__nbr_timers, NBR_OF_TIMERS);
+    Serial.printf("error Timers::Timers(): Error of 'g__st_timers' definition\n");
+    Serial.printf("error Timers::Timers(): Nbr timers found [%d] != [%d] defined\n", l__nbr_timers, NBR_OF_TIMERS);
+
+#if USE_SIMULATION
+    // Erreur fatale en simulation ;-)
+    abort();
+#endif
   }
 }
 
