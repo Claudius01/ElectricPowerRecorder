@@ -1,4 +1,4 @@
-// $Id: SDCard.cpp,v 1.23 2025/07/13 14:14:03 administrateur Exp $
+// $Id: SDCard.cpp,v 1.24 2025/07/31 12:53:44 administrateur Exp $
 
 #if USE_SIMULATION
 #include "ArduinoTypes.h"
@@ -806,15 +806,20 @@ void SDCard::printNbrErrors()
   memset(l__buffer, ' ', sizeof(l__buffer));
   l__buffer[sizeof(l__buffer) - 1] = '\0';
 
-  strcpy(l__buffer, "Err: ");
-  formatValue(m__file_properties.frame_nbr_errors, &l__buffer[strlen(l__buffer)]);
+  if (m__file_properties.frame_nbr_errors == 0) {
+    strcpy(l__buffer, "No error");
+  }
+  else {
+    strcpy(l__buffer, "Err: ");
+    formatValue(m__file_properties.frame_nbr_errors, &l__buffer[strlen(l__buffer)]);
 
-  // Padding pour effacer la propriete precedente
-  l__buffer[strlen(l__buffer)] = ' ';
+    // Padding pour effacer la propriete precedente
+    l__buffer[strlen(l__buffer)] = ' ';
+  }
 
   // Affichage sur le LCD @ au nombre d'erreurs et l'etat d'inhibition d'ecriture de la SDCard
   g__gestion_lcd->Paint_DrawString_EN(TEXT_POSITION_PROPERTIES_X, TEXT_POSITION_PROPERTIES_Y,
-    l__buffer, &Font12, BLACK, ((m__file_properties.frame_nbr_errors == 0) ? ((getInhAppendEPowerFrame() == false) ? YELLOW : WHITE) : RED));
+    l__buffer, &Font12, BLACK, ((m__file_properties.frame_nbr_errors == 0) ? ((getInhAppendEPowerFrame() == false) ? GREEN : WHITE) : RED));
 
 #if USE_SIMULATION
   printf("Nbr Errors [%s]\n", l__buffer);

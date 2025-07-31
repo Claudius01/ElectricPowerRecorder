@@ -1,4 +1,4 @@
-// $Id: GestionLCD.cpp,v 1.50 2025/06/02 14:42:46 administrateur Exp $
+// $Id: GestionLCD.cpp,v 1.51 2025/07/31 12:53:44 administrateur Exp $
 
 #if USE_SIMULATION
 #include "ArduinoTypes.h"
@@ -1521,6 +1521,10 @@ GestionLCD::GestionLCD() : m__screen_virtual_period(SCREEN_VIRTUAL_PERIOD_5_MIN)
                            m__sub_menu_period(SUB_MENU_PERIOD_5_MINUTES), m__sub_menu_unit(SUB_MENU_UNIT_WATTS_HOUR)                      
 {
   Serial.printf("GestionLCD::GestionLCD() m__sub_menu_period [%d] m__sub_menu_unit [%d]\n", m__sub_menu_period, m__sub_menu_unit);
+
+#if USE_SIMULATION
+  m__flg_use_image_background = false;
+#endif
 }
 
 GestionLCD::~GestionLCD()

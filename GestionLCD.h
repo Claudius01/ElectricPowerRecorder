@@ -1,4 +1,4 @@
-// $Id: GestionLCD.h,v 1.43 2025/06/04 14:56:10 administrateur Exp $
+// $Id: GestionLCD.h,v 1.44 2025/07/31 12:53:44 administrateur Exp $
 
 #ifndef __GESTION_LCD__
 #define __GESTION_LCD__
@@ -413,6 +413,10 @@ class GestionLCD : public Paint
     ENUM_SUB_MENU_PERIOD    m__sub_menu_period;
     ENUM_SUB_MENU_UNIT      m__sub_menu_unit;
 
+#if USE_SIMULATION
+    bool                    m__flg_use_image_background;
+#endif
+
 	public:
 		GestionLCD();
 		~GestionLCD();
@@ -433,6 +437,11 @@ class GestionLCD : public Paint
 
     ENUM_SUB_MENU_PERIOD getSubMenuPeriod() const { return m__sub_menu_period; };
     ENUM_SUB_MENU_UNIT   getSubMenuUnit() const { return m__sub_menu_unit; };
+
+#if USE_SIMULATION
+    void setImageBackgroundInUse(bool i__value) { m__flg_use_image_background = i__value; };
+    bool isImageBackgroundInUse() const         { return m__flg_use_image_background; };
+#endif
 };
 
 extern GestionLCD   *g__gestion_lcd;

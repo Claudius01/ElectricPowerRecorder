@@ -1,4 +1,4 @@
-// $Id: AnalogRead.cpp,v 1.40 2025/07/13 14:14:03 administrateur Exp $
+// $Id: AnalogRead.cpp,v 1.41 2025/07/31 12:53:44 administrateur Exp $
 
 #if USE_SIMULATION
 #include "ArduinoTypes.h"
@@ -28,7 +28,7 @@
 
 void callback_analog_acq()
 {
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_ACQ_GRAY, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, YELLOW);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_ACQ_GRAY, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, GREEN);
 }
 
 void callback_conso_flash()
@@ -191,7 +191,7 @@ bool AnalogRead::readValue()
 
   // Presentation de l'acquisition
   g__timers->start(TIMER_ANALOG_ACQ, DURATION_TIMER_ANALOG_ACQ, &callback_analog_acq);
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_ACQ_GRAY, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, YELLOW);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_ACQ_GRAY, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, GREEN);
 
   /* Calcul des consommations des Wh au moyen d'un "flash" de 100mS
      => ie. Flash a 1Hz si la consommation est de 3600 Watts

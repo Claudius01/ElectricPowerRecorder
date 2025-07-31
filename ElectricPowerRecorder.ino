@@ -1,4 +1,4 @@
-// $Id: ElectricPowerRecorder.ino,v 1.96 2025/07/13 14:14:03 administrateur Exp $
+// $Id: ElectricPowerRecorder.ino,v 1.97 2025/07/31 12:53:44 administrateur Exp $
 
 /* Projet: ElectricPowerRecorder
 */
@@ -32,7 +32,7 @@
 #endif
 
 #define COPYRIGHT   "@micro-infos.com"
-#define PROMPT      "ElectricPowerRecorder 2025/07/13 V1.7"
+#define PROMPT      "ElectricPowerRecorder 2025/07/31 V1.7"
 
 #define USE_INCOMING_CMD    1
 
@@ -296,13 +296,31 @@ void callback_exec_chenillard()
 
   if (g__chenillard & 0x0001) {
     g__state_leds |= STATE_LED_GREEN;
+
+#if USE_SIMULATION
+    /* Forcage allumage GREEN dans le cas de l'utilisation d'une image de fond
+       => a cause de la charge de travail qui fait deriver le temps logiciel @ materiel
+    */
+    g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_GREEN, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK,
+      (g__duration_diff == 0L) ? GREEN : (g__gestion_lcd->isImageBackgroundInUse() == true) ? GREEN : YELLOW);
+#else
     g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_GREEN, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK,
       (g__duration_diff == 0L) ? GREEN : YELLOW);
+#endif
   }
   else {
     g__state_leds &= ~STATE_LED_GREEN;
+
+#if USE_SIMULATION
+    /* Forcage allumage GREEN dans le cas de l'utilisation d'une image de fond
+       => a cause de la charge de travail qui fait deriver le temps logiciel @ materiel
+    */
+    g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_GREEN, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK,
+      (g__duration_diff == 0L) ? GREEN : (g__gestion_lcd->isImageBackgroundInUse() == true) ? GREEN : YELLOW);
+#else
     g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_GREEN, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK,
       (g__duration_diff == 0L) ? GREEN : YELLOW);
+#endif
   }
 
   g__timers->start(TIMER_CHENILLARD, DURATION_TIMER_CHENILLARD, &callback_exec_chenillard);
@@ -421,7 +439,7 @@ void testSymbology()
   //g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_YELLOW_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, YELLOW);
   //g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_RED_X, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, RED);
 
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_ACQ_GRAY, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, YELLOW);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_ACQ_GRAY, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, GREEN);
 
   g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_GREEN, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, GREEN);
   g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_SDC_YELLOW, LIGHTS_POSITION_Y, LIGHT_FULL_IDX, &Font16Symbols, BLACK, YELLOW);
@@ -455,7 +473,7 @@ void testSymbology()
   delay(500);
 #endif
 
-  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_ACQ_GRAY, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, YELLOW);
+  g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_ACQ_GRAY, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, GREEN);
   delay(500);
 
   g__gestion_lcd->Paint_DrawSymbol(LIGHTS_POSITION_RTC_GREEN, LIGHTS_POSITION_Y, LIGHT_BORD_IDX, &Font16Symbols, BLACK, GREEN);
@@ -484,7 +502,7 @@ void readAndDrawElectricPower(AnalogRead *i__analog_read, UWORD i__y)
   char l__text_for_lcd[32];
   memset(l__text_for_lcd, '\0', sizeof(l__text_for_lcd));
 
-  bool l__new_values = i__analog_read->readValue();
+  i__analog_read->readValue();
 
   //Serial.printf("%s(): Entering..\n", __FUNCTION__);
 
@@ -661,7 +679,7 @@ void setup()
 
   // Montage de la SDCard
   g__sdcard = new SDCard();
-  bool l__flg_sdcard_init = g__sdcard->init();
+  g__sdcard->init();
 
   g__button = new OneButton(PIN_INPUT, true);
   g__button->attachLongPressStart(callback_long_press_start, g__button);
