@@ -14,3 +14,6 @@ Projet basé sur une clé USB [ESP32-S3-GEEK](https://www.waveshare.com/wiki/ESP
 ## 🛠️ Environnement de développement
 Arduino IDE 2.3.2 + package pour ESP32
 (https://espressif.github.io/arduino-esp32/package_esp32_index.json)
+
+## Présentation sur 24 heures de fonctionnement
+[Vidéo](https://youtu.be/y9ntpcjDOnc)
